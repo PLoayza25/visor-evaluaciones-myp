@@ -1,4 +1,4 @@
-<!DOCTYPE html><!-- deploy 2026-07-06T20:52:35.132026 -->
+<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -576,7 +576,7 @@ function buildReportCard(st,forPrint){
     if(v!=null) byArea[r.area][r.criteria][ev]=v;
   });
 
-  // Only evals that have at least one score for this student
+  // Only evals with at least one score for this student
   const usedEvals=allEvals.filter(ev=>
     Object.values(byArea).some(crits=>Object.values(crits).some(m=>m[ev]!=null))
   );
@@ -599,13 +599,15 @@ function buildReportCard(st,forPrint){
 
   function thSt(center){
     return `padding:${fp?'5px 8px':'6px 11px'};background:${LGRAY};font-size:${fsS};font-weight:700;`+
-           `border-top:1px solid ${MGRAY};border-bottom:2px solid ${BLACK};color:${BLACK};text-align:${center?'center':'left'};white-space:nowrap`;
+           `border-top:1px solid ${MGRAY};border-bottom:2px solid ${BLACK};color:${BLACK};`+
+           `text-align:${center?'center':'left'};white-space:nowrap`;
   }
   function tdNum(v){
     if(v==null) return `<td style="text-align:center;padding:${pad};border-bottom:1px solid ${MGRAY};color:#ccc;font-size:${fsS}">—</td>`;
     const low=v<4;
-    return `<td style="text-align:center;padding:${pad};border-bottom:1px solid ${MGRAY};font-family:monospace;`+
-           `font-weight:700;font-size:${fs};${low?`background:#fdf0f0;color:${RED}`:''}">${v}</td>`;
+    return `<td style="text-align:center;padding:${pad};border-bottom:1px solid ${MGRAY};`+
+           `font-family:monospace;font-weight:700;font-size:${fs};`+
+           `${low?`background:#fdf0f0;color:${RED}`:''}">${v}</td>`;
   }
 
   let html=`<div style="font-family:${fp?'Arial':'IBM Plex Sans'},sans-serif;color:${BLACK};max-width:860px">`;
@@ -614,7 +616,7 @@ function buildReportCard(st,forPrint){
   html+=`<div style="text-align:center;padding:${fp?'8px 0 5px':'14px 0 10px'};border-bottom:3px solid ${RED};margin-bottom:${fp?'8px':'14px'}">
     <div style="font-size:${fp?'20px':'26px'};font-weight:700;letter-spacing:-.5px">Redland School</div>
     <div style="font-size:${fp?'12px':'15px'};font-weight:600;color:${RED};margin-top:2px">Informe MYP — Resultados por Criterio</div>
-    <div style="font-size:${fp?'9px':'11px'};color:${DGRAY};margin-top:3px">${DATA.period||DATA.title||''}</div>
+    <div style="font-size:${fp?'9px':'11px'};color:${DGRAY};margin-top:3px">${DATA.period||''}</div>
   </div>`;
 
   // ── Student name bar ──
@@ -635,6 +637,7 @@ function buildReportCard(st,forPrint){
     </tr></thead><tbody>`;
 
   mypAreas.forEach(area=>{
+    // ALL criteria for this area, even those with no scores
     const allCrits=getAreaCriteria(area);
     html+=`<tr><td colspan="${usedEvals.length+1}" style="background:${RED};color:#fff;font-weight:600;`+
           `padding:${fp?'3px 10px':'5px 12px'};font-size:${fsS}">${area}</td></tr>`;
@@ -648,25 +651,50 @@ function buildReportCard(st,forPrint){
   });
   html+=`</tbody></table>`;
 
-  // ── Section: Otras Asignaturas ──
+  // ── Section: Otras Asignaturas (no header row, just subject names) ──
   html+=`<div style="background:${BLACK};color:#fff;font-size:${fp?'11px':'13px'};font-weight:700;`+
         `padding:${fp?'4px 10px':'6px 12px'};margin-bottom:0">Otras Asignaturas</div>`;
 
-  html+=`<table style="width:100%;border-collapse:collapse;font-size:${fs};margin-bottom:${fp?'14px':'22px'};border:1px solid ${MGRAY}">
-    <thead><tr>
-      <th style="${thSt(false)}">Asignatura</th>
-      <th style="${thSt(false)}" colspan="${Math.max(usedEvals.length,1)}">Observaciones</th>
-    </tr></thead><tbody>`;
+  html+=`<table style="width:100%;border-collapse:collapse;font-size:${fs};margin-bottom:${fp?'10px':'16px'};border:1px solid ${MGRAY}">
+    <tbody>`;
   allOthers.forEach(subj=>{
     html+=`<tr>
       <td style="padding:${pad};border-bottom:1px solid ${MGRAY};font-size:${fsS}">${subj}</td>
-      <td colspan="${Math.max(usedEvals.length,1)}" style="padding:${pad};border-bottom:1px solid ${MGRAY}"></td>
     </tr>`;
   });
   html+=`</tbody></table>`;
 
+  // ── Attendance table ──
+  html+=`<table style="width:100%;border-collapse:collapse;font-size:${fs};margin-bottom:${fp?'14px':'22px'};border:1px solid ${MGRAY}">
+    <thead><tr>
+      <th style="${thSt(false)};width:50%"></th>
+      <th style="${thSt(true)}">1er Semestre</th>
+      <th style="${thSt(true)}">2do Semestre</th>
+      <th style="${thSt(true)}">Final</th>
+    </tr></thead>
+    <tbody>`;
+  const attRows=[
+    '% de asistencia','Inasistencias','Atrasos Inicio Jornada',
+    'Atrasos Intersesión','Anotaciones positivas','Anotaciones negativas',
+    'Castigos','Suspensiones'
+  ];
+  attRows.forEach(row=>{
+    html+=`<tr>
+      <td style="padding:${pad};border-bottom:1px solid ${MGRAY};font-weight:600;font-size:${fsS}">${row}</td>
+      <td style="padding:${pad};border-bottom:1px solid ${MGRAY};text-align:center"></td>
+      <td style="padding:${pad};border-bottom:1px solid ${MGRAY};text-align:center"></td>
+      <td style="padding:${pad};border-bottom:1px solid ${MGRAY};text-align:center"></td>
+    </tr>`;
+  });
+  html+=`</tbody></table>`;
+
+  // ── Comentarios ──
+  html+=`<div style="border:1px solid ${MGRAY};padding:${fp?'6px 10px':'10px 14px'};margin-bottom:${fp?'14px':'22px'}">
+    <div style="font-size:${fsS};font-weight:600;margin-bottom:${fp?'16px':'24px'}">Comentarios:</div>
+  </div>`;
+
   // ── Footer: signatures + date ──
-  html+=`<div style="margin-top:${fp?'20px':'32px'};padding-top:${fp?'10px':'16px'};border-top:2px solid ${BLACK}">
+  html+=`<div style="margin-top:${fp?'16px':'24px'};padding-top:${fp?'10px':'16px'};border-top:2px solid ${BLACK}">
     <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:${fp?'6px':'10px'}">
       <div style="text-align:center;width:42%">
         <div style="height:${fp?'28px':'40px'}"></div>
@@ -698,7 +726,7 @@ function printTodos(){
 function openPrintWindow(students){
   const win=window.open('','_blank');
   const body=students.map(st=>`<div class="block">${buildReportCard(st,true)}</div>`).join('');
-  win.document.write(`<!DOCTYPE html><!-- deploy 2026-07-06T20:52:35.132026 --><html lang="es"><head><meta charset="UTF-8">
+  win.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
   <title>Informe Redland MYP</title>
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
