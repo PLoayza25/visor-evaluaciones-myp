@@ -573,6 +573,7 @@ const MYP_CRITERIA = {
   'diseño':       ['A. Indagación y Análisis','B. Desarrollo de Ideas','C. Creación de la Solución','D. Evaluación'],
   'diseno':       ['A. Indagación y Análisis','B. Desarrollo de Ideas','C. Creación de la Solución','D. Evaluación'],
   'educación fís':['A. Conocimiento y Comprensión','B. Planificación del Rendimiento','C. Aplicación y Ejecución','D. Reflexión y mejora del Rendimiento'],
+  'educación fí':['A. Conocimiento y Comprensión','B. Planificación del Rendimiento','C. Aplicación y Ejecución','D. Reflexión y mejora del Rendimiento'],
   'educacion fis':['A. Conocimiento y Comprensión','B. Planificación del Rendimiento','C. Aplicación y Ejecución','D. Reflexión y mejora del Rendimiento'],
   'física':       ['A. Conocimiento y Comprensión','B. Planificación del Rendimiento','C. Aplicación y Ejecución','D. Reflexión y mejora del Rendimiento'],
   'fisica':       ['A. Conocimiento y Comprensión','B. Planificación del Rendimiento','C. Aplicación y Ejecución','D. Reflexión y mejora del Rendimiento'],
@@ -592,10 +593,10 @@ function getFullCriteria(area){
 // Fixed MYP subject order (add any not in list at end)
 const MYP_ORDER = [
   'Lengua y Literatura','Inglés','Matemática','Individuos y Sociedades',
-  'Ciencias','Música','Artes','Diseño','Educación Física y Salud'
+  'Ciencias','Música','Artes','Diseño','Educación Física'
 ];
 // Always shown even if not in Excel
-const GUARANTEED_AREAS = ['Educación Física y Salud'];
+const GUARANTEED_AREAS = ['Educación Física'];
 
 function buildReportCard(st,forPrint){
   const RED='#9b1c1c', BLACK='#1a1a1a', LGRAY='#f0f0f0', MGRAY='#d0d0d0', DGRAY='#444';
