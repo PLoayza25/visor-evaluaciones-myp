@@ -576,23 +576,17 @@ function buildReportCard(st,forPrint){
     if(v!=null) byArea[r.area][r.criteria][ev]=v;
   });
 
-  // All evals across dataset (not just this student) so columns are consistent
   const usedEvals=allEvals;
 
-  const OTHER_KEYWORDS=['deporte','religión','religion','orientación','orientacion','mundo de','física','fisica'];
-  const MYP_KEYWORDS=['lengua','inglés','ingles','matemát','matemat','individuos','ciencias','artes','diseño','diseno','educación física','educacion fisica'];
-  // Separate: anything with física/fisica goes to "Otras", pure MYP subjects stay in MYP
-  const OTRAS_KEYWORDS=['deporte','religión','religion','orientación','orientacion','mundo de'];
-  const mypAreas  =areas.filter(a=>!OTRAS_KEYWORDS.some(k=>a.toLowerCase().includes(k)));
-  const otherAreas=areas.filter(a=> OTRAS_KEYWORDS.some(k=>a.toLowerCase().includes(k)));
-  const fixedOthers=['Deportes','Religión (Católica)','Mundo de Religiones','Orientación'];
-  const allOthers=[...new Set([...fixedOthers,...otherAreas])];
+  // Only fixed non-curricular subjects go to "Otras" — everything from the spreadsheet is MYP
+  const OTRAS_FIXED=['Deportes','Religión (Católica)','Mundo de Religiones','Orientación'];
+  // All areas from the data go into mypAreas
+  const mypAreas=areas;
 
   const today=new Date().toLocaleDateString('es-CL',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
   const todayCap=today.charAt(0).toUpperCase()+today.slice(1);
 
   const fp=forPrint;
-  // Very compact sizing for print to fit A4
   const fs  = fp?'8.5px':'12px';
   const fsS = fp?'8px':'11px';
   const fsXS= fp?'7.5px':'10px';
@@ -622,19 +616,19 @@ function buildReportCard(st,forPrint){
     <div style="font-size:${fp?'8px':'11px'};color:${DGRAY};margin-top:2px">${DATA.period||''}</div>
   </div>`;
 
-  // ── Student name bar ──
+  // ── Student name bar — only show name and course, NO title/filename ──
   html+=`<div style="display:flex;justify-content:space-between;align-items:center;`+
         `border:1.5px solid ${BLACK};padding:${fp?'4px 8px':'7px 14px'};margin-bottom:${fp?'6px':'12px'}">
     <span style="font-size:${fp?'10px':'14px'}"><strong>Nombre:</strong>&nbsp;&nbsp;${st}</span>
-    <span style="font-size:${fp?'9px':'12px'};color:${DGRAY};font-weight:600">${DATA.title||''}</span>
+    <span style="font-size:${fp?'9px':'12px'};color:${DGRAY};font-weight:600">${DATA.period||''}</span>
   </div>`;
 
-  // ── MYP Subjects table ──
+  // ── MYP Subjects ──
   html+=`<div style="background:${BLACK};color:#fff;font-size:${fp?'9px':'13px'};font-weight:700;`+
         `padding:${hdrPad};margin-bottom:0">Asignaturas MYP</div>`;
 
   html+=`<table style="width:100%;border-collapse:collapse;font-size:${fs};`+
-        `margin-bottom:${fp?'6px':'12px'};border:1px solid ${MGRAY};table-layout:fixed">
+        `margin-bottom:${fp?'5px':'10px'};border:1px solid ${MGRAY};table-layout:fixed">
     <colgroup>
       <col style="width:auto">
       ${usedEvals.map(()=>`<col style="width:${evW}">`).join('')}
@@ -646,6 +640,7 @@ function buildReportCard(st,forPrint){
 
   mypAreas.forEach(area=>{
     const allCrits=getAreaCriteria(area);
+    if(!allCrits.length) return;
     html+=`<tr><td colspan="${usedEvals.length+1}" style="background:${RED};color:#fff;font-weight:600;`+
           `padding:${fp?'2px 8px':'4px 12px'};font-size:${fsS}">${area}</td></tr>`;
     allCrits.forEach(crit=>{
@@ -661,15 +656,15 @@ function buildReportCard(st,forPrint){
   // ── Other subjects ──
   html+=`<div style="background:${BLACK};color:#fff;font-size:${fp?'9px':'13px'};font-weight:700;`+
         `padding:${hdrPad};margin-bottom:0">Otras Asignaturas</div>`;
-  html+=`<table style="width:100%;border-collapse:collapse;font-size:${fs};margin-bottom:${fp?'6px':'12px'};border:1px solid ${MGRAY}">
+  html+=`<table style="width:100%;border-collapse:collapse;font-size:${fs};margin-bottom:${fp?'5px':'10px'};border:1px solid ${MGRAY}">
     <tbody>`;
-  allOthers.forEach(subj=>{
+  OTRAS_FIXED.forEach(subj=>{
     html+=`<tr><td style="padding:${cellPad};border-bottom:1px solid ${MGRAY};font-size:${fsS}">${subj}</td></tr>`;
   });
   html+=`</tbody></table>`;
 
   // ── Attendance ──
-  html+=`<table style="width:100%;border-collapse:collapse;font-size:${fs};margin-bottom:${fp?'6px':'12px'};border:1px solid ${MGRAY}">
+  html+=`<table style="width:100%;border-collapse:collapse;font-size:${fs};margin-bottom:${fp?'5px':'10px'};border:1px solid ${MGRAY}">
     <thead><tr>
       <th style="${thSt(false)};width:50%"></th>
       <th style="${thSt(true)}">1er Semestre</th>
@@ -688,20 +683,20 @@ function buildReportCard(st,forPrint){
   html+=`</tbody></table>`;
 
   // ── Comentarios ──
-  html+=`<div style="border:1px solid ${MGRAY};padding:${fp?'4px 8px':'8px 12px'};margin-bottom:${fp?'10px':'18px'}">
-    <div style="font-size:${fsS};font-weight:600;margin-bottom:${fp?'14px':'22px'}">Comentarios:</div>
+  html+=`<div style="border:1px solid ${MGRAY};padding:${fp?'4px 8px':'8px 12px'};margin-bottom:${fp?'8px':'16px'}">
+    <div style="font-size:${fsS};font-weight:600;margin-bottom:${fp?'12px':'20px'}">Comentarios:</div>
   </div>`;
 
   // ── Footer ──
-  html+=`<div style="padding-top:${fp?'8px':'14px'};border-top:2px solid ${BLACK}">
+  html+=`<div style="padding-top:${fp?'6px':'12px'};border-top:2px solid ${BLACK}">
     <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:4px">
       <div style="text-align:center;width:42%">
-        <div style="height:${fp?'22px':'36px'}"></div>
+        <div style="height:${fp?'20px':'32px'}"></div>
         <div style="border-top:1.5px solid ${BLACK};padding-top:3px"></div>
         <div style="font-size:${fsS};font-weight:600">Profesor/a Jefe</div>
       </div>
       <div style="text-align:center;width:42%">
-        <div style="font-size:${fsS};font-weight:600;margin-bottom:${fp?'22px':'36px'}">Ms. Rossana Moraga</div>
+        <div style="font-size:${fsS};font-weight:600;margin-bottom:${fp?'20px':'32px'}">Ms. Rossana Moraga</div>
         <div style="border-top:1.5px solid ${BLACK};padding-top:3px"></div>
         <div style="font-size:${fsS};font-weight:600">Head of Middle School</div>
       </div>
