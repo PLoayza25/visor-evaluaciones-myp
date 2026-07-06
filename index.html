@@ -557,14 +557,63 @@ function getAllEvals(){
   return all;
 }
 
-function getAreaCriteria(area){
-  return [...new Set(DATA.records.filter(r=>r.area===area).map(r=>r.criteria))];
+// ── MYP standard criteria per subject ──
+// Keys use lowercase partial match against area name
+const MYP_CRITERIA = {
+  'lengua':       ['A. Análisis','B. Organización','C. Producción de Textos','D. Uso del Lenguaje'],
+  'inglés':       ['A. Comprensión Auditiva','B. Comprensión Lectora','C. Expresión Oral','D. Expresión Escrita'],
+  'ingles':       ['A. Comprensión Auditiva','B. Comprensión Lectora','C. Expresión Oral','D. Expresión Escrita'],
+  'matemát':      ['A. Conocimiento y Comprensión','B. Investigación de Patrones','C. Comunicación','D. Aplicación de las Matemáticas en contextos de la vida real'],
+  'matemat':      ['A. Conocimiento y Comprensión','B. Investigación de Patrones','C. Comunicación','D. Aplicación de las Matemáticas en contextos de la vida real'],
+  'individuos':   ['A. Conocimiento y Comprensión','B. Investigación','C. Comunicación','D. Pensamiento Crítico'],
+  'ciencias':     ['A. Conocimiento y Comprensión','B. Indagación y Diseño','C. Procesamiento y Evaluación','D. Reflexión sobre el Impacto de la Ciencia'],
+  'música':       ['A. Investigación','B. Desarrollo','C. Creación/Ejecución','D. Evaluación'],
+  'musica':       ['A. Investigación','B. Desarrollo','C. Creación/Ejecución','D. Evaluación'],
+  'artes':        ['A. Investigación','B. Desarrollo','C. Creación/Ejecución','D. Evaluación'],
+  'diseño':       ['A. Indagación y Análisis','B. Desarrollo de Ideas','C. Creación de la Solución','D. Evaluación'],
+  'diseno':       ['A. Indagación y Análisis','B. Desarrollo de Ideas','C. Creación de la Solución','D. Evaluación'],
+  'educación fís':['A. Conocimiento y Comprensión','B. Planificación del Rendimiento','C. Aplicación y Ejecución','D. Reflexión y mejora del Rendimiento'],
+  'educacion fis':['A. Conocimiento y Comprensión','B. Planificación del Rendimiento','C. Aplicación y Ejecución','D. Reflexión y mejora del Rendimiento'],
+  'física':       ['A. Conocimiento y Comprensión','B. Planificación del Rendimiento','C. Aplicación y Ejecución','D. Reflexión y mejora del Rendimiento'],
+  'fisica':       ['A. Conocimiento y Comprensión','B. Planificación del Rendimiento','C. Aplicación y Ejecución','D. Reflexión y mejora del Rendimiento'],
+};
+
+// Get all criteria for an area: merge standard + any extra from data
+function getFullCriteria(area){
+  const key = Object.keys(MYP_CRITERIA).find(k => area.toLowerCase().includes(k));
+  const standard = key ? MYP_CRITERIA[key] : [];
+  const fromData = [...new Set(DATA.records.filter(r=>r.area===area).map(r=>r.criteria))];
+  // Merge: start with standard, add any from data not already in standard
+  const merged = [...standard];
+  fromData.forEach(c=>{ if(!merged.includes(c)) merged.push(c); });
+  return merged;
 }
+
+// Fixed MYP subject order (add any not in list at end)
+const MYP_ORDER = [
+  'Lengua y Literatura','Inglés','Matemática','Individuos y Sociedades',
+  'Ciencias','Música','Artes','Diseño','Educación Física y Salud','Educación Física'
+];
 
 function buildReportCard(st,forPrint){
   const RED='#9b1c1c', BLACK='#1a1a1a', LGRAY='#f0f0f0', MGRAY='#d0d0d0', DGRAY='#444';
   const allEvals=getAllEvals();
-  const areas=[...new Set(DATA.records.map(r=>r.area))];
+  const dataAreas=[...new Set(DATA.records.map(r=>r.area))];
+
+  // Sort areas: known order first, then alphabetical remainder
+  const mypAreas=[
+    ...MYP_ORDER.filter(o=>dataAreas.some(a=>a.toLowerCase().includes(o.toLowerCase()))),
+    ...dataAreas.filter(a=>!MYP_ORDER.some(o=>a.toLowerCase().includes(o.toLowerCase())))
+  ];
+  // Deduplicate preserving order
+  const seenAreas=new Set();
+  const sortedAreas=[];
+  mypAreas.forEach(a=>{
+    const match=dataAreas.find(d=>d.toLowerCase().includes(a.toLowerCase())||a.toLowerCase().includes(d.toLowerCase()));
+    if(match&&!seenAreas.has(match)){seenAreas.add(match);sortedAreas.push(match);}
+  });
+  // Add any remaining not yet included
+  dataAreas.forEach(a=>{if(!seenAreas.has(a)){seenAreas.add(a);sortedAreas.push(a);}});
 
   // area → criteria → {E1:v,…}
   const byArea={};
@@ -577,11 +626,7 @@ function buildReportCard(st,forPrint){
   });
 
   const usedEvals=allEvals;
-
-  // Only fixed non-curricular subjects go to "Otras" — everything from the spreadsheet is MYP
   const OTRAS_FIXED=['Deportes','Religión (Católica)','Mundo de Religiones','Orientación'];
-  // All areas from the data go into mypAreas
-  const mypAreas=areas;
 
   const today=new Date().toLocaleDateString('es-CL',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
   const todayCap=today.charAt(0).toUpperCase()+today.slice(1);
@@ -597,7 +642,8 @@ function buildReportCard(st,forPrint){
 
   function thSt(center){
     return `padding:${fp?'4px 5px':'6px 8px'};background:${LGRAY};font-size:${fsXS};font-weight:700;`+
-           `border-bottom:1.5px solid ${BLACK};color:${BLACK};text-align:${center?'center':'left'};white-space:nowrap`;
+           `border-bottom:1.5px solid ${BLACK};color:${BLACK};`+
+           `text-align:${center?'center':'left'};white-space:nowrap`;
   }
   function tdNum(v){
     if(v==null) return `<td style="text-align:center;padding:${cellPad};border-bottom:1px solid ${MGRAY};color:#ccc;font-size:${fsXS}">—</td>`;
@@ -616,7 +662,7 @@ function buildReportCard(st,forPrint){
     <div style="font-size:${fp?'8px':'11px'};color:${DGRAY};margin-top:2px">${DATA.period||''}</div>
   </div>`;
 
-  // ── Student name bar — only show name and course, NO title/filename ──
+  // ── Student name bar ──
   html+=`<div style="display:flex;justify-content:space-between;align-items:center;`+
         `border:1.5px solid ${BLACK};padding:${fp?'4px 8px':'7px 14px'};margin-bottom:${fp?'6px':'12px'}">
     <span style="font-size:${fp?'10px':'14px'}"><strong>Nombre:</strong>&nbsp;&nbsp;${st}</span>
@@ -638,15 +684,15 @@ function buildReportCard(st,forPrint){
       ${usedEvals.map(ev=>`<th style="${thSt(true)}">${ev}</th>`).join('')}
     </tr></thead><tbody>`;
 
-  mypAreas.forEach(area=>{
-    const allCrits=getAreaCriteria(area);
-    if(!allCrits.length) return;
+  sortedAreas.forEach(area=>{
+    const allCrits=getFullCriteria(area);
     html+=`<tr><td colspan="${usedEvals.length+1}" style="background:${RED};color:#fff;font-weight:600;`+
           `padding:${fp?'2px 8px':'4px 12px'};font-size:${fsS}">${area}</td></tr>`;
     allCrits.forEach(crit=>{
       const evMap=(byArea[area]&&byArea[area][crit])||{};
       html+=`<tr>
-        <td style="padding:${cellPadL};border-bottom:1px solid ${MGRAY};color:${DGRAY};font-size:${fsS};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${crit}</td>
+        <td style="padding:${cellPadL};border-bottom:1px solid ${MGRAY};color:${DGRAY};`+
+             `font-size:${fsS};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${crit}</td>
         ${usedEvals.map(ev=>tdNum(evMap[ev]??null)).join('')}
       </tr>`;
     });
@@ -656,15 +702,16 @@ function buildReportCard(st,forPrint){
   // ── Other subjects ──
   html+=`<div style="background:${BLACK};color:#fff;font-size:${fp?'9px':'13px'};font-weight:700;`+
         `padding:${hdrPad};margin-bottom:0">Otras Asignaturas</div>`;
-  html+=`<table style="width:100%;border-collapse:collapse;font-size:${fs};margin-bottom:${fp?'5px':'10px'};border:1px solid ${MGRAY}">
-    <tbody>`;
+  html+=`<table style="width:100%;border-collapse:collapse;font-size:${fs};`+
+        `margin-bottom:${fp?'5px':'10px'};border:1px solid ${MGRAY}"><tbody>`;
   OTRAS_FIXED.forEach(subj=>{
     html+=`<tr><td style="padding:${cellPad};border-bottom:1px solid ${MGRAY};font-size:${fsS}">${subj}</td></tr>`;
   });
   html+=`</tbody></table>`;
 
   // ── Attendance ──
-  html+=`<table style="width:100%;border-collapse:collapse;font-size:${fs};margin-bottom:${fp?'5px':'10px'};border:1px solid ${MGRAY}">
+  html+=`<table style="width:100%;border-collapse:collapse;font-size:${fs};`+
+        `margin-bottom:${fp?'5px':'10px'};border:1px solid ${MGRAY}">
     <thead><tr>
       <th style="${thSt(false)};width:50%"></th>
       <th style="${thSt(true)}">1er Semestre</th>
@@ -683,7 +730,8 @@ function buildReportCard(st,forPrint){
   html+=`</tbody></table>`;
 
   // ── Comentarios ──
-  html+=`<div style="border:1px solid ${MGRAY};padding:${fp?'4px 8px':'8px 12px'};margin-bottom:${fp?'8px':'16px'}">
+  html+=`<div style="border:1px solid ${MGRAY};padding:${fp?'4px 8px':'8px 12px'};`+
+        `margin-bottom:${fp?'8px':'16px'}">
     <div style="font-size:${fsS};font-weight:600;margin-bottom:${fp?'12px':'20px'}">Comentarios:</div>
   </div>`;
 
