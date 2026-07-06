@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Visor de Evaluaciones MYP</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f0ede8;
+  --surface:#ffffff;
+  --surface2:#f7f5f2;
+  --ink:#1c1a17;
+  --muted:#6b6560;
+  --faint:#c8c4be;
+  --rule:#e2ded8;
+  --accent:#1e4d8c;
+  --danger:#c0392b;
+  --warn:#e67e22;
+  --ok:#2e7d32;
+  --badge-low:#fdecea;
+  --badge-low-text:#b71c1c;
+}
+body{font-family:'IBM Plex Sans',sans-serif;background:var(--bg);color:var(--ink);font-size:14px;line-height:1.5}
+
+/* ── LAYOUT ── */
+.app{display:flex;min-height:100vh}
+.sidebar{width:220px;min-height:100vh;background:var(--ink);color:#fff;flex-shrink:0;display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow-y:auto}
+.main{flex:1;padding:28px 32px;overflow-x:auto}
+
+/* ── SIDEBAR ── */
+.logo{padding:20px 16px 12px;border-bottom:1px solid rgba(255,255,255,.12)}
+.logo h1{font-size:13px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;opacity:.9}
+.logo p{font-size:11px;opacity:.45;margin-top:2px}
+.logo-reset{font-size:10px;color:rgba(255,255,255,.35);cursor:pointer;margin-top:6px;display:inline-block}
+.logo-reset:hover{color:rgba(255,255,255,.7)}
+.nav{padding:12px 0;flex:1}
+.nav-btn{display:block;width:100%;text-align:left;background:none;border:none;color:rgba(255,255,255,.65);font:inherit;font-size:12px;padding:9px 16px;cursor:pointer;border-left:3px solid transparent;transition:all .15s}
+.nav-btn:hover{color:#fff;background:rgba(255,255,255,.07)}
+.nav-btn.active{color:#fff;background:rgba(255,255,255,.12);border-left-color:#64b5f6}
+.nav-section{padding:12px 16px 4px;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;opacity:.35}
+
+/* ── PAGE HEADER ── */
+.page-header{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:20px;gap:16px;flex-wrap:wrap}
+.page-title{font-size:20px;font-weight:600;letter-spacing:-.3px}
+.page-sub{font-size:12px;color:var(--muted);margin-top:2px}
+.controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+select,input[type=text]{font:inherit;font-size:12px;background:var(--surface);border:1px solid var(--rule);border-radius:4px;padding:6px 10px;color:var(--ink);outline:none}
+select:focus,input[type=text]:focus{border-color:var(--accent)}
+.btn{font:inherit;font-size:12px;background:var(--surface);border:1px solid var(--rule);border-radius:4px;padding:6px 12px;cursor:pointer;color:var(--ink);white-space:nowrap}
+.btn:hover{background:var(--surface2);border-color:var(--faint)}
+.btn-primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+.btn-primary:hover{background:#163d73}
+
+/* ── PANELS ── */
+.panel{display:none}
+.panel.active{display:block}
+
+/* ── TABLES ── */
+.table-wrap{overflow-x:auto;border-radius:6px;border:1px solid var(--rule);background:var(--surface)}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{background:var(--surface2);font-weight:600;font-size:11px;letter-spacing:.3px;padding:8px 10px;border-bottom:1.5px solid var(--rule);text-align:left;white-space:nowrap;position:sticky;top:0}
+td{padding:7px 10px;border-bottom:1px solid var(--rule);white-space:nowrap}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:#f5f3ef}
+.num{text-align:center;font-family:'IBM Plex Mono',monospace;font-size:12px}
+.low{background:var(--badge-low)!important;color:var(--badge-low-text);font-weight:600;border-radius:3px}
+.na{color:var(--faint);text-align:center}
+.bold{font-weight:600}
+
+/* ── BADGE ── */
+.badge{display:inline-block;font-size:10px;font-weight:600;padding:1px 6px;border-radius:3px;font-family:'IBM Plex Mono',monospace}
+.badge-low{background:var(--badge-low);color:var(--badge-low-text)}
+.badge-ok{background:#e8f5e9;color:#1b5e20}
+.badge-mid{background:#fff3e0;color:#e65100}
+
+/* ── STAT CARDS ── */
+.stats-row{display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap}
+.stat-card{background:var(--surface);border:1px solid var(--rule);border-radius:6px;padding:14px 18px;flex:1;min-width:120px}
+.stat-card .label{font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
+.stat-card .value{font-size:22px;font-weight:600;font-family:'IBM Plex Mono',monospace}
+.stat-card .value.red{color:var(--danger)}
+.stat-card .value.blue{color:var(--accent)}
+
+/* ── ALERT LIST ── */
+.alert-item{background:var(--surface);border:1px solid var(--rule);border-left:3px solid var(--danger);border-radius:4px;padding:10px 14px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
+.alert-item .name{font-weight:600;font-size:13px}
+.alert-item .detail{font-size:11px;color:var(--muted)}
+.alert-item .pills{display:flex;gap:6px;flex-wrap:wrap}
+.pill{font-size:10px;font-weight:600;font-family:'IBM Plex Mono',monospace;padding:2px 7px;border-radius:10px;background:var(--badge-low);color:var(--badge-low-text)}
+
+/* ── STUDENT CARD ── */
+.student-card{background:var(--surface);border:1px solid var(--rule);border-radius:6px;padding:20px;margin-bottom:16px;page-break-inside:avoid}
+.student-card h3{font-size:15px;font-weight:600;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--rule)}
+.student-card table{font-size:11px}
+
+/* ── UPLOAD SCREEN ── */
+#upload-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:40px 20px;background:var(--bg)}
+.upload-logo{font-size:12px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:48px}
+.upload-logo span{color:var(--accent)}
+.upload-card{background:var(--surface);border:1px solid var(--rule);border-radius:12px;padding:44px;max-width:500px;width:100%;text-align:center}
+.upload-card h1{font-size:20px;font-weight:600;margin-bottom:8px}
+.upload-card p{color:var(--muted);font-size:13px;line-height:1.7;margin-bottom:24px}
+.upload-zone{border:2px dashed var(--faint);border-radius:8px;padding:26px;margin-bottom:16px;cursor:pointer;transition:all .2s;position:relative}
+.upload-zone:hover{border-color:var(--accent)}
+.upload-zone input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.upload-zone-label{font-size:13px;color:var(--muted)}
+.upload-zone-label strong{color:var(--accent);font-weight:500}
+.upload-note{font-size:11px;color:var(--muted);opacity:.6}
+.upload-error{background:var(--badge-low);border:1px solid #f5c6c6;color:var(--danger);font-size:12px;padding:10px 14px;border-radius:6px;margin-top:12px;display:none;text-align:left}
+
+/* ── PRINT ── */
+@media print{
+  .sidebar,.controls,.btn,.no-print,#upload-screen{display:none!important}
+  .main{padding:0}
+  .panel{display:block!important}
+  body{background:#fff;font-size:11px}
+  .page-header{margin-bottom:12px}
+  .student-card{page-break-inside:avoid;border:1px solid #ccc;margin-bottom:12px}
+  .table-wrap{border:1px solid #ccc}
+  th{background:#f0f0f0!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .low{background:#fdecea!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
+</style>
+</head>
+<body>
+
+<!-- ════ UPLOAD SCREEN ════ -->
+<div id="upload-screen">
+  <div class="upload-logo">Visor <span>MYP</span> · Evaluaciones</div>
+  <div class="upload-card" id="drop-zone">
+    <div style="font-size:44px;margin-bottom:14px;opacity:.7">📊</div>
+    <h1>Cargar planilla de evaluaciones</h1>
+    <p>Sube el archivo Excel exportado desde el sistema escolar.<br>
+    Se detectarán automáticamente estudiantes, asignaturas y criterios.</p>
+    <div class="upload-zone">
+      <input type="file" id="file-input" accept=".xls,.xlsx" />
+      <div class="upload-zone-label">
+        <strong>Haz clic para seleccionar</strong> o arrastra el archivo aquí<br>
+        <span style="font-size:11px;opacity:.6;display:block;margin-top:4px">Formatos: .xls · .xlsx</span>
+      </div>
+    </div>
+    <div class="upload-note">Estructura esperada: fila de encabezado con nombres · col A = Área · col B = Criterio/Evaluación</div>
+    <div class="upload-error" id="upload-error"></div>
+  </div>
+</div>
+
+<!-- ════ APP ════ -->
+<div id="app-wrap" style="display:none">
+<div class="app">
+
+<!-- SIDEBAR -->
+<nav class="sidebar">
+  <div class="logo">
+    <h1 id="sb-title">MYP</h1>
+    <p id="sb-meta">—</p>
+    <span class="logo-reset no-print" onclick="resetApp()">↩ Cargar otro archivo</span>
+  </div>
+  <div class="nav">
+    <div class="nav-section">Vistas</div>
+    <button class="nav-btn active" onclick="showPanel('asignatura')">📚 Por asignatura</button>
+    <button class="nav-btn" onclick="showPanel('estudiante')">👤 Por estudiante</button>
+    <button class="nav-btn" onclick="showPanel('alertas')">⚠️ Resultados &lt; 4</button>
+    <button class="nav-btn" onclick="showPanel('listado')">📋 Listado completo</button>
+    <button class="nav-btn" onclick="showPanel('fichas')">🖨️ Fichas individuales</button>
+  </div>
+</nav>
+
+<!-- MAIN -->
+<main class="main">
+
+<!-- POR ASIGNATURA -->
+<div id="panel-asignatura" class="panel active">
+  <div class="page-header">
+    <div>
+      <div class="page-title">Vista por asignatura</div>
+      <div class="page-sub">Todos los estudiantes por materia y criterio</div>
+    </div>
+    <div class="controls">
+      <select id="sel-area" onchange="updateCriteriaSelect();renderAsignatura()"></select>
+      <select id="sel-criteria" onchange="renderAsignatura()"></select>
+      <button class="btn no-print" onclick="window.print()">🖨️ Imprimir</button>
+    </div>
+  </div>
+  <div id="table-asignatura"></div>
+</div>
+
+<!-- POR ESTUDIANTE -->
+<div id="panel-estudiante" class="panel">
+  <div class="page-header">
+    <div>
+      <div class="page-title">Vista por estudiante</div>
+      <div class="page-sub">Todas las asignaturas del alumno seleccionado</div>
+    </div>
+    <div class="controls">
+      <select id="sel-student" onchange="renderEstudiante()"></select>
+      <button class="btn no-print" onclick="printEstudiante()">🖨️ Imprimir este</button>
+      <button class="btn btn-primary no-print" onclick="printTodos()">🖨️ Imprimir todos</button>
+    </div>
+  </div>
+  <div id="table-estudiante"></div>
+</div>
+
+<!-- ALERTAS -->
+<div id="panel-alertas" class="panel">
+  <div class="page-header">
+    <div>
+      <div class="page-title">Resultados bajo 4</div>
+      <div class="page-sub">Estudiantes con al menos una evaluación con resultado inferior a 4</div>
+    </div>
+    <div class="controls">
+      <button class="btn no-print" onclick="window.print()">🖨️ Imprimir</button>
+    </div>
+  </div>
+  <div id="stats-alertas" class="stats-row"></div>
+  <div id="list-alertas"></div>
+</div>
+
+<!-- LISTADO COMPLETO -->
+<div id="panel-listado" class="panel">
+  <div class="page-header">
+    <div>
+      <div class="page-title">Listado completo</div>
+      <div class="page-sub">Todos los estudiantes · asignaturas · evaluaciones</div>
+    </div>
+    <div class="controls">
+      <input type="text" id="search-listado" placeholder="Buscar estudiante…" oninput="renderListado()">
+      <select id="filter-area-listado" onchange="renderListado()"><option value="">Todas las asignaturas</option></select>
+      <button class="btn no-print" onclick="window.print()">🖨️ Imprimir</button>
+    </div>
+  </div>
+  <div id="table-listado"></div>
+</div>
+
+<!-- FICHAS -->
+<div id="panel-fichas" class="panel">
+  <div class="page-header">
+    <div>
+      <div class="page-title">Fichas individuales</div>
+      <div class="page-sub">Resumen por estudiante — listo para imprimir</div>
+    </div>
+    <div class="controls">
+      <select id="sel-student-ficha" onchange="renderFichas()">
+        <option value="todos">Todos los estudiantes</option>
+      </select>
+      <button class="btn btn-primary no-print" onclick="window.print()">🖨️ Imprimir fichas</button>
+    </div>
+  </div>
+  <div id="fichas-container"></div>
+</div>
+
+</main>
+</div>
+</div><!-- end app-wrap -->
+
+<script>
+// ════════════════════════════
+//  UPLOAD
+// ════════════════════════════
+let DATA = null;
+
+const dropZone = document.getElementById('drop-zone');
+const fileInput = document.getElementById('file-input');
+const uploadError = document.getElementById('upload-error');
+
+dropZone.addEventListener('dragover', e=>{e.preventDefault();dropZone.style.borderColor='var(--accent)'});
+dropZone.addEventListener('dragleave', ()=>{dropZone.style.borderColor=''});
+dropZone.addEventListener('drop', e=>{
+  e.preventDefault(); dropZone.style.borderColor='';
+  if(e.dataTransfer.files[0]) processFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', ()=>{if(fileInput.files[0]) processFile(fileInput.files[0])});
+
+function showError(msg){uploadError.style.display='block';uploadError.textContent='⚠️ '+msg}
+
+function processFile(file){
+  uploadError.style.display='none';
+  if(!/\.(xls|xlsx)$/i.test(file.name)){showError('El archivo debe ser .xls o .xlsx');return}
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      const wb=XLSX.read(e.target.result,{type:'array'});
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      const raw=XLSX.utils.sheet_to_json(ws,{header:1,defval:null});
+      DATA=parseSheet(raw,file.name);
+      if(!DATA) return;
+      initApp();
+    }catch(err){showError('Error al leer el archivo: '+err.message)}
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function parseSheet(raw,filename){
+  // Detect format by checking if col0 of an early row is "Apellido y Nombre"
+  // FORMAT A (old): students in columns, areas/evals in rows
+  // FORMAT B (new): students in rows, areas/evals in columns
+  const isFormatB = raw.slice(0,8).some(row=>
+    row && String(row[0]||'').toLowerCase().includes('apellido')
+  );
+  return isFormatB ? parseFormatB(raw,filename) : parseFormatA(raw,filename);
+}
+
+// ── FORMAT A: students in columns (original format) ──
+function parseFormatA(raw,filename){
+  let headerRow=-1;
+  for(let i=0;i<Math.min(10,raw.length);i++){
+    const row=raw[i];
+    if(!row) continue;
+    const nonNull=row.slice(2).filter(v=>v!==null&&v!==undefined&&String(v).trim()!=='').length;
+    if(nonNull>=3){headerRow=i;break}
+  }
+  if(headerRow===-1){showError('No se encontró la fila de encabezado.');return null}
+
+  const headerRowData=raw[headerRow];
+  const students=[];
+  for(let col=2;col<headerRowData.length;col++){
+    const v=headerRowData[col];
+    if(v!==null&&v!==undefined&&String(v).trim()!=='') students.push(String(v).trim());
+  }
+  if(!students.length){showError('No se encontraron nombres de estudiantes.');return null}
+
+  let title=filename.replace(/\.[^.]+$/,''), period='';
+  for(let i=0;i<headerRow;i++){
+    const row=raw[i]; if(!row) continue;
+    const v=String(row[0]||'');
+    if(/periodo/i.test(v)) period=v;
+    if(/informe|competencias|evaluaciones/i.test(v)) title=v;
+  }
+
+  const records=[];
+  let currentArea=null, currentCriteria=null;
+  for(let i=headerRow+1;i<raw.length;i++){
+    const row=raw[i]; if(!row) continue;
+    const areaVal=row[0]!=null?String(row[0]).trim():'';
+    const comp=row[1]!=null?String(row[1]).trim():'';
+    if(areaVal&&areaVal!=='nan') currentArea=areaVal;
+    if(!comp||comp==='nan'||/MYP Assessment/i.test(comp)) continue;
+    if(!/evaluaci[oó]n/i.test(comp)){currentCriteria=comp;continue}
+    const values={};
+    for(let si=0;si<students.length;si++){
+      const v=row[2+si];
+      if(v!=null&&v!==''){const n=parseFloat(v);if(!isNaN(n)) values[students[si]]=n}
+    }
+    if(Object.keys(values).length>0) records.push({area:currentArea,criteria:currentCriteria,eval:comp,values});
+  }
+  if(!records.length){showError('No se encontraron evaluaciones con datos en el archivo.');return null}
+  return{students,records,filename,title,period};
+}
+
+// ── FORMAT B: students in rows (new export format) ──
+// Row 0: school name
+// Row 1: date, period
+// Row 2: course, teacher
+// Row 3: [null, Area1, null, ..., Area2, null, ...] (merged cells — area repeats or is null)
+// Row 4: [Apellido y Nombre, Eval1, Eval2, ..., Eval1, Eval2, ...]
+// Row 5+: [StudentName, score, score, ...]
+function parseFormatB(raw,filename){
+  // Find the header row (has "Apellido y Nombre" in col 0)
+  let headerRow=-1;
+  for(let i=0;i<Math.min(10,raw.length);i++){
+    if(raw[i] && String(raw[i][0]||'').toLowerCase().includes('apellido')){
+      headerRow=i; break;
+    }
+  }
+  if(headerRow===-1){showError('No se encontró la fila de encabezado.');return null}
+
+  // Row above header has area names (with merged cells = nulls between them)
+  const areaRow = raw[headerRow-1] || [];
+  const evalRow = raw[headerRow] || [];
+
+  // Metadata
+  let title=filename.replace(/\.[^.]+$/,''), period='', course='';
+  for(let i=0;i<headerRow-1;i++){
+    const row=raw[i]; if(!row) continue;
+    const v0=String(row[0]||''), v2=String(row[2]||'');
+    if(/periodo/i.test(v0)||/periodo/i.test(v2)){
+      // Row 1 format: ["Fecha...", "date", "Periodo:", "value"]
+      for(let c=0;c<row.length;c++){
+        if(/periodo/i.test(String(row[c]||''))&&row[c+1]) period=String(row[c+1]);
+      }
+    }
+    if(/curso/i.test(v0)) course=v0;
+    if(/informe|competencias|evaluaciones|redland|school/i.test(v0)) title=v0;
+  }
+  if(course) title=course;
+
+  // Build column map: col → {area, eval}
+  // Area from areaRow: carry forward non-null values (merged cells)
+  const colMap=[];
+  let currentArea=null;
+  for(let col=1;col<evalRow.length;col++){
+    const areaVal=areaRow[col]!=null&&String(areaRow[col]).trim()!==''?String(areaRow[col]).trim():null;
+    if(areaVal) currentArea=areaVal;
+    const evalVal=evalRow[col]!=null?String(evalRow[col]).trim():'';
+    if(/evaluaci[oó]n/i.test(evalVal)){
+      colMap.push({col, area:currentArea, eval:evalVal});
+    }
+  }
+  if(!colMap.length){showError('No se encontraron columnas de evaluación.');return null}
+
+  // The area row may also contain criteria info — check if there's a criteria row
+  // between areaRow and headerRow. If headerRow-1 has areas and headerRow has evals,
+  // criteria might be in headerRow-2 or embedded in area names.
+  // For now treat area as-is (may include criteria in name).
+
+  // Collect students and scores
+  const students=[];
+  // records: for each column group, build {area, criteria, eval, values}
+  // We'll accumulate per (area, eval) combination
+  const colRecords={};
+  colMap.forEach(cm=>{
+    const key=cm.area+'|||'+cm.eval;
+    if(!colRecords[key]) colRecords[key]={area:cm.area, criteria:'General', eval:cm.eval, cols:[], values:{}};
+    colRecords[key].cols.push(cm.col);
+  });
+
+  for(let i=headerRow+1;i<raw.length;i++){
+    const row=raw[i]; if(!row) continue;
+    const name=row[0]!=null?String(row[0]).trim():'';
+    if(!name||name==='nan') continue;
+    students.push(name);
+    colMap.forEach(cm=>{
+      const v=row[cm.col];
+      if(v!=null&&v!==''){
+        const n=parseFloat(v);
+        if(!isNaN(n)){
+          const key=cm.area+'|||'+cm.eval;
+          colRecords[key].values[name]=n;
+        }
+      }
+    });
+  }
+
+  if(!students.length){showError('No se encontraron estudiantes.');return null}
+
+  const records=Object.values(colRecords).filter(r=>Object.keys(r.values).length>0);
+  if(!records.length){showError('No se encontraron evaluaciones con datos en el archivo.');return null}
+
+  // Clean up records (remove internal cols array)
+  records.forEach(r=>delete r.cols);
+  return{students,records,filename,title,period};
+}
+
+function initApp(){
+  document.getElementById('upload-screen').style.display='none';
+  document.getElementById('app-wrap').style.display='block';
+  document.getElementById('sb-title').textContent=DATA.title;
+  document.getElementById('sb-meta').textContent=DATA.period||DATA.students.length+' estudiantes';
+  initSelects();
+  renderAsignatura();
+}
+
+function resetApp(){
+  DATA=null;
+  document.getElementById('upload-screen').style.display='flex';
+  document.getElementById('app-wrap').style.display='none';
+  fileInput.value='';uploadError.style.display='none';
+}
+
+// ════════════════════════════
+//  INIT SELECTS
+// ════════════════════════════
+function initSelects(){
+  // FIX: define areas from DATA here, not as a global
+  const areas=[...new Set(DATA.records.map(r=>r.area))];
+
+  const sa=document.getElementById('sel-area');
+  sa.innerHTML='';
+  areas.forEach(a=>{const o=document.createElement('option');o.value=a;o.textContent=a;sa.appendChild(o)});
+  updateCriteriaSelect();
+
+  const ss=document.getElementById('sel-student');
+  ss.innerHTML='';
+  DATA.students.forEach(s=>{const o=document.createElement('option');o.value=s;o.textContent=s;ss.appendChild(o)});
+
+  const sf=document.getElementById('sel-student-ficha');
+  sf.innerHTML='<option value="todos">Todos los estudiantes</option>';
+  DATA.students.forEach(s=>{const o=document.createElement('option');o.value=s;o.textContent=s;sf.appendChild(o)});
+
+  const fal=document.getElementById('filter-area-listado');
+  fal.innerHTML='<option value="">Todas las asignaturas</option>';
+  areas.forEach(a=>{const o=document.createElement('option');o.value=a;o.textContent=a;fal.appendChild(o)});
+}
+
+function updateCriteriaSelect(){
+  if(!DATA) return;
+  const area=document.getElementById('sel-area').value;
+  const sc=document.getElementById('sel-criteria');
+  sc.innerHTML='<option value="">Todos los criterios</option>';
+  const crits=[...new Set(DATA.records.filter(r=>r.area===area).map(r=>r.criteria))];
+  crits.forEach(c=>{const o=document.createElement('option');o.value=c;o.textContent=c;sc.appendChild(o)});
+}
+
+// ════════════════════════════
+//  HELPERS
+// ════════════════════════════
+function abbrevEval(e){return e.replace(/evaluaci[oó]n\s*/i,'E')}
+
+function scoreCell(v){
+  if(v===null||v===undefined) return `<td class="na">—</td>`;
+  return `<td class="num${v<4?' low':''}">${v}</td>`;
+}
+
+// ════════════════════════════
+//  PANEL NAVIGATION
+// ════════════════════════════
+function showPanel(name){
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('panel-'+name).classList.add('active');
+  event.target.classList.add('active');
+  if(name==='asignatura') renderAsignatura();
+  if(name==='estudiante') renderEstudiante();
+  if(name==='alertas') renderAlertas();
+  if(name==='listado') renderListado();
+  if(name==='fichas') renderFichas();
+}
+
+// ════════════════════════════
+//  VIEW 1: POR ASIGNATURA
+// ════════════════════════════
+function renderAsignatura(){
+  if(!DATA) return;
+  const area=document.getElementById('sel-area').value;
+  const filterCrit=document.getElementById('sel-criteria').value;
+  const recs=DATA.records.filter(r=>r.area===area&&(!filterCrit||r.criteria===filterCrit));
+  if(!recs.length){document.getElementById('table-asignatura').innerHTML='<p style="color:var(--muted);padding:20px">Sin datos.</p>';return}
+  const cols=recs.map(r=>({criteria:r.criteria,eval:abbrevEval(r.eval),rec:r}));
+  let html=`<div class="table-wrap"><table><thead><tr><th>Estudiante</th>`;
+  cols.forEach(c=>{html+=`<th title="${c.criteria} · ${c.rec.eval}">${c.criteria.split('.')[0]} ${c.eval}</th>`});
+  html+=`</tr></thead><tbody>`;
+  DATA.students.forEach(st=>{
+    html+=`<tr><td class="bold">${st}</td>`;
+    cols.forEach(c=>{html+=scoreCell(c.rec.values[st]??null)});
+    html+=`</tr>`;
+  });
+  html+=`</tbody></table></div>`;
+  document.getElementById('table-asignatura').innerHTML=html;
+}
+
+// ════════════════════════════
+//  VIEW 2: POR ESTUDIANTE — Redland Report Card
+// ════════════════════════════
+function abbrevEval(e){return e.replace(/evaluaci[oó]n\s*/i,'E')}
+
+function renderEstudiante(){
+  if(!DATA) return;
+  const st=document.getElementById('sel-student').value;
+  document.getElementById('table-estudiante').innerHTML=buildReportCard(st,false);
+}
+
+function getAllEvals(){
+  const all=[];
+  DATA.records.forEach(r=>{const ev=abbrevEval(r.eval);if(!all.includes(ev)) all.push(ev)});
+  return all;
+}
+
+function getAreaCriteria(area){
+  return [...new Set(DATA.records.filter(r=>r.area===area).map(r=>r.criteria))];
+}
+
+function buildReportCard(st,forPrint){
+  const RED='#9b1c1c', BLACK='#1a1a1a', LGRAY='#f5f5f5', MGRAY='#e0e0e0', DGRAY='#555';
+  const allEvals=getAllEvals();
+  const areas=[...new Set(DATA.records.map(r=>r.area))];
+
+  // area → criteria → {E1:v,…}
+  const byArea={};
+  DATA.records.forEach(r=>{
+    if(!byArea[r.area]) byArea[r.area]={};
+    if(!byArea[r.area][r.criteria]) byArea[r.area][r.criteria]={};
+    const ev=abbrevEval(r.eval);
+    const v=r.values[st];
+    if(v!=null) byArea[r.area][r.criteria][ev]=v;
+  });
+
+  // Only evals that have at least one score for this student
+  const usedEvals=allEvals.filter(ev=>
+    Object.values(byArea).some(crits=>Object.values(crits).some(m=>m[ev]!=null))
+  );
+
+  const OTHER_KEYWORDS=['deporte','religión','religion','orientación','orientacion','mundo de'];
+  const mypAreas  =areas.filter(a=>!OTHER_KEYWORDS.some(k=>a.toLowerCase().includes(k)));
+  const otherAreas=areas.filter(a=> OTHER_KEYWORDS.some(k=>a.toLowerCase().includes(k)));
+  const fixedOthers=['Deportes','Religión (Católica)','Mundo de Religiones','Orientación'];
+  const allOthers=[...new Set([...fixedOthers,...otherAreas])];
+
+  const today=new Date().toLocaleDateString('es-CL',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  const todayCap=today.charAt(0).toUpperCase()+today.slice(1);
+
+  const fp=forPrint;
+  const fs =fp?'10px':'12px';
+  const fsS=fp?'9px':'11px';
+  const pad=fp?'4px 8px':'7px 11px';
+  const padL=fp?'4px 8px 4px 18px':'7px 11px 7px 22px';
+  const evW=fp?'38px':'52px';
+
+  function thSt(center){
+    return `padding:${fp?'5px 8px':'6px 11px'};background:${LGRAY};font-size:${fsS};font-weight:700;`+
+           `border-top:1px solid ${MGRAY};border-bottom:2px solid ${BLACK};color:${BLACK};text-align:${center?'center':'left'};white-space:nowrap`;
+  }
+  function tdNum(v){
+    if(v==null) return `<td style="text-align:center;padding:${pad};border-bottom:1px solid ${MGRAY};color:#ccc;font-size:${fsS}">—</td>`;
+    const low=v<4;
+    return `<td style="text-align:center;padding:${pad};border-bottom:1px solid ${MGRAY};font-family:monospace;`+
+           `font-weight:700;font-size:${fs};${low?`background:#fdf0f0;color:${RED}`:''}">${v}</td>`;
+  }
+
+  let html=`<div style="font-family:${fp?'Arial':'IBM Plex Sans'},sans-serif;color:${BLACK};max-width:860px">`;
+
+  // ── School header ──
+  html+=`<div style="text-align:center;padding:${fp?'8px 0 5px':'14px 0 10px'};border-bottom:3px solid ${RED};margin-bottom:${fp?'8px':'14px'}">
+    <div style="font-size:${fp?'20px':'26px'};font-weight:700;letter-spacing:-.5px">Redland School</div>
+    <div style="font-size:${fp?'12px':'15px'};font-weight:600;color:${RED};margin-top:2px">Informe MYP — Resultados por Criterio</div>
+    <div style="font-size:${fp?'9px':'11px'};color:${DGRAY};margin-top:3px">${DATA.period||DATA.title||''}</div>
+  </div>`;
+
+  // ── Student name bar ──
+  html+=`<div style="display:flex;justify-content:space-between;align-items:center;`+
+        `border:1.5px solid ${BLACK};padding:${fp?'5px 10px':'8px 14px'};margin-bottom:${fp?'10px':'16px'}">
+    <span style="font-size:${fp?'11px':'14px'}"><strong>Nombre:</strong>&nbsp;&nbsp;${st}</span>
+    <span style="font-size:${fp?'10px':'12px'};color:${DGRAY};font-weight:600">${DATA.title||''}</span>
+  </div>`;
+
+  // ── Section: Asignaturas MYP ──
+  html+=`<div style="background:${BLACK};color:#fff;font-size:${fp?'11px':'13px'};font-weight:700;`+
+        `padding:${fp?'4px 10px':'6px 12px'};margin-bottom:0">Asignaturas MYP</div>`;
+
+  html+=`<table style="width:100%;border-collapse:collapse;font-size:${fs};margin-bottom:${fp?'10px':'16px'};border:1px solid ${MGRAY}">
+    <thead><tr>
+      <th style="${thSt(false)};min-width:${fp?'160px':'200px'}">Asignatura / Criterio</th>
+      ${usedEvals.map(ev=>`<th style="${thSt(true)};width:${evW}">${ev}</th>`).join('')}
+    </tr></thead><tbody>`;
+
+  mypAreas.forEach(area=>{
+    const allCrits=getAreaCriteria(area);
+    html+=`<tr><td colspan="${usedEvals.length+1}" style="background:${RED};color:#fff;font-weight:600;`+
+          `padding:${fp?'3px 10px':'5px 12px'};font-size:${fsS}">${area}</td></tr>`;
+    allCrits.forEach(crit=>{
+      const evMap=(byArea[area]&&byArea[area][crit])||{};
+      html+=`<tr>
+        <td style="padding:${padL};border-bottom:1px solid ${MGRAY};color:${DGRAY};font-size:${fsS}">${crit}</td>
+        ${usedEvals.map(ev=>tdNum(evMap[ev]??null)).join('')}
+      </tr>`;
+    });
+  });
+  html+=`</tbody></table>`;
+
+  // ── Section: Otras Asignaturas ──
+  html+=`<div style="background:${BLACK};color:#fff;font-size:${fp?'11px':'13px'};font-weight:700;`+
+        `padding:${fp?'4px 10px':'6px 12px'};margin-bottom:0">Otras Asignaturas</div>`;
+
+  html+=`<table style="width:100%;border-collapse:collapse;font-size:${fs};margin-bottom:${fp?'14px':'22px'};border:1px solid ${MGRAY}">
+    <thead><tr>
+      <th style="${thSt(false)}">Asignatura</th>
+      <th style="${thSt(false)}" colspan="${Math.max(usedEvals.length,1)}">Observaciones</th>
+    </tr></thead><tbody>`;
+  allOthers.forEach(subj=>{
+    html+=`<tr>
+      <td style="padding:${pad};border-bottom:1px solid ${MGRAY};font-size:${fsS}">${subj}</td>
+      <td colspan="${Math.max(usedEvals.length,1)}" style="padding:${pad};border-bottom:1px solid ${MGRAY}"></td>
+    </tr>`;
+  });
+  html+=`</tbody></table>`;
+
+  // ── Footer: signatures + date ──
+  html+=`<div style="margin-top:${fp?'20px':'32px'};padding-top:${fp?'10px':'16px'};border-top:2px solid ${BLACK}">
+    <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:${fp?'6px':'10px'}">
+      <div style="text-align:center;width:42%">
+        <div style="height:${fp?'28px':'40px'}"></div>
+        <div style="border-top:1.5px solid ${BLACK};padding-top:4px"></div>
+        <div style="font-size:${fsS};font-weight:600">Profesor/a Jefe</div>
+      </div>
+      <div style="text-align:center;width:42%">
+        <div style="font-size:${fsS};font-weight:600;margin-bottom:${fp?'28px':'40px'}">Ms. Rossana Moraga</div>
+        <div style="border-top:1.5px solid ${BLACK};padding-top:4px"></div>
+        <div style="font-size:${fsS};font-weight:600">Head of Middle School</div>
+      </div>
+    </div>
+    <div style="text-align:center;font-size:${fsS};color:${DGRAY};margin-top:${fp?'6px':'10px'}">${todayCap}</div>
+  </div>`;
+
+  html+=`</div>`;
+  return html;
+}
+
+function printEstudiante(){
+  const st=document.getElementById('sel-student').value;
+  openPrintWindow([st]);
+}
+
+function printTodos(){
+  openPrintWindow(DATA.students);
+}
+
+function openPrintWindow(students){
+  const win=window.open('','_blank');
+  const body=students.map(st=>`<div class="block">${buildReportCard(st,true)}</div>`).join('');
+  win.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+  <title>Informe Redland MYP</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:Arial,sans-serif;font-size:10px;color:#1a1a1a;background:#fff;padding:16px 20px}
+    .block{page-break-after:always}
+    .block:last-child{page-break-after:avoid}
+    @media print{body{padding:10px 14px}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+  </style></head><body>${body}
+  <scr`+`ipt>window.onload=()=>{window.print();window.onafterprint=()=>window.close()}</scr`+`ipt>
+  </body></html>`);
+  win.document.close();
+}
+
+// ════════════════════════════
+//  VIEW 3: ALERTAS < 4
+// ════════════════════════════
+function renderAlertas(){
+  if(!DATA) return;
+  const alerts={};
+  DATA.records.forEach(r=>{
+    Object.entries(r.values).forEach(([st,v])=>{
+      if(v<4){
+        if(!alerts[st]) alerts[st]=[];
+        alerts[st].push({area:r.area,criteria:r.criteria,eval:abbrevEval(r.eval),v});
+      }
+    });
+  });
+  const count=Object.keys(alerts).length;
+  const totalLow=Object.values(alerts).reduce((s,a)=>s+a.length,0);
+  document.getElementById('stats-alertas').innerHTML=`
+    <div class="stat-card"><div class="label">Estudiantes afectados</div><div class="value red">${count}</div></div>
+    <div class="stat-card"><div class="label">Total resultados &lt; 4</div><div class="value red">${totalLow}</div></div>
+    <div class="stat-card"><div class="label">Estudiantes sin alertas</div><div class="value blue">${DATA.students.length-count}</div></div>`;
+  if(!count){document.getElementById('list-alertas').innerHTML='<p style="color:var(--ok);padding:16px">✓ Ningún estudiante tiene resultados bajo 4.</p>';return}
+  let html='';
+  Object.entries(alerts).sort((a,b)=>b[1].length-a[1].length).forEach(([st,items])=>{
+    const pills=items.map(i=>`<span class="pill" title="${i.area} · ${i.criteria}">${i.area.split(' ')[0]} ${i.eval}: ${i.v}</span>`).join('');
+    html+=`<div class="alert-item"><div><div class="name">${st}</div><div class="detail">${items.length} resultado${items.length>1?'s':''} bajo 4</div></div><div class="pills">${pills}</div></div>`;
+  });
+  document.getElementById('list-alertas').innerHTML=html;
+}
+
+// ════════════════════════════
+//  VIEW 4: LISTADO COMPLETO
+// ════════════════════════════
+function renderListado(){
+  if(!DATA) return;
+  const q=(document.getElementById('search-listado').value||'').toLowerCase();
+  const fa=document.getElementById('filter-area-listado').value;
+  let rows=[];
+  DATA.records.forEach(r=>{
+    if(fa&&r.area!==fa) return;
+    Object.entries(r.values).forEach(([st,v])=>{
+      if(q&&!st.toLowerCase().includes(q)) return;
+      rows.push({st,area:r.area,criteria:r.criteria,eval:abbrevEval(r.eval),v});
+    });
+  });
+  rows.sort((a,b)=>a.st.localeCompare(b.st)||a.area.localeCompare(b.area));
+  let html=`<div class="table-wrap"><table><thead><tr><th>Estudiante</th><th>Asignatura</th><th>Criterio</th><th>Eval.</th><th class="num">Resultado</th></tr></thead><tbody>`;
+  rows.forEach(r=>{html+=`<tr><td class="bold">${r.st}</td><td>${r.area}</td><td>${r.criteria}</td><td>${r.eval}</td>${scoreCell(r.v)}</tr>`});
+  html+=`</tbody></table></div>`;
+  document.getElementById('table-listado').innerHTML=html;
+}
+
+// ════════════════════════════
+//  VIEW 5: FICHAS
+//  Usa la misma estructura que buildEstudianteTable
+// ════════════════════════════
+function renderFichas(){
+  if(!DATA) return;
+  const sel=document.getElementById('sel-student-ficha').value;
+  const students=sel==='todos'?DATA.students:[sel];
+  let html='';
+  students.forEach(st=>{
+    const allVals=DATA.records.map(r=>r.values[st]).filter(v=>v!=null);
+    if(!allVals.length) return;
+    const lowCount=allVals.filter(v=>v<4).length;
+    html+=`<div class="student-card">
+      <h3>${st}${lowCount>0?` &nbsp;<span class="badge badge-low">${lowCount} resultado${lowCount>1?'s':''} bajo 4</span>`:''}</h3>
+      ${buildEstudianteTable(st,false)}
+    </div>`;
+  });
+  document.getElementById('fichas-container').innerHTML=html||'<p style="color:var(--muted)">Sin datos.</p>';
+}
+</script>
+</body>
+</html>
