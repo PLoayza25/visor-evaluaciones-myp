@@ -592,28 +592,34 @@ function getFullCriteria(area){
 // Fixed MYP subject order (add any not in list at end)
 const MYP_ORDER = [
   'Lengua y Literatura','Inglés','Matemática','Individuos y Sociedades',
-  'Ciencias','Música','Artes','Diseño','Educación Física y Salud','Educación Física'
+  'Ciencias','Música','Artes','Diseño','Educación Física y Salud'
 ];
+// Always shown even if not in Excel
+const GUARANTEED_AREAS = ['Educación Física y Salud'];
 
 function buildReportCard(st,forPrint){
   const RED='#9b1c1c', BLACK='#1a1a1a', LGRAY='#f0f0f0', MGRAY='#d0d0d0', DGRAY='#444';
   const allEvals=getAllEvals();
   const dataAreas=[...new Set(DATA.records.map(r=>r.area))];
 
-  // Sort areas: known order first, then alphabetical remainder
-  const mypAreas=[
-    ...MYP_ORDER.filter(o=>dataAreas.some(a=>a.toLowerCase().includes(o.toLowerCase()))),
-    ...dataAreas.filter(a=>!MYP_ORDER.some(o=>a.toLowerCase().includes(o.toLowerCase())))
-  ];
-  // Deduplicate preserving order
+  // Build sorted area list: known order first, guaranteed areas always included
   const seenAreas=new Set();
   const sortedAreas=[];
-  mypAreas.forEach(a=>{
-    const match=dataAreas.find(d=>d.toLowerCase().includes(a.toLowerCase())||a.toLowerCase().includes(d.toLowerCase()));
+
+  // 1. Add areas in MYP_ORDER that exist in data
+  MYP_ORDER.forEach(o=>{
+    const match=dataAreas.find(d=>d.toLowerCase().includes(o.toLowerCase())||o.toLowerCase().includes(d.toLowerCase()));
     if(match&&!seenAreas.has(match)){seenAreas.add(match);sortedAreas.push(match);}
   });
-  // Add any remaining not yet included
+
+  // 2. Add any data areas not yet included
   dataAreas.forEach(a=>{if(!seenAreas.has(a)){seenAreas.add(a);sortedAreas.push(a);}});
+
+  // 3. Always add GUARANTEED_AREAS at end if not already present
+  GUARANTEED_AREAS.forEach(g=>{
+    const already=sortedAreas.some(a=>a.toLowerCase().includes(g.toLowerCase())||g.toLowerCase().includes(a.toLowerCase()));
+    if(!already){sortedAreas.push(g);}
+  });
 
   // area → criteria → {E1:v,…}
   const byArea={};
