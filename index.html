@@ -342,8 +342,8 @@ function mergeSemesters(d1,d2){
   parts.forEach(p=>records.push(...p.records));
   const title=(d1&&d1.title)||(d2&&d2.title)||'Informe MYP';
   const periodParts=[];
-  if(d1) periodParts.push('1er Semestre'+(d1.period?': '+d1.period:''));
-  if(d2) periodParts.push('2do Semestre'+(d2.period?': '+d2.period:''));
+  if(d1) periodParts.push(d1.period?d1.period:'1er Semestre');
+  if(d2) periodParts.push(d2.period?d2.period:'2do Semestre');
   const period=periodParts.join('  ·  ');
   const filename=parts.map(p=>p.filename).join(' + ');
   return {students,records,title,period,filename,hasSem1:!!d1,hasSem2:!!d2};
@@ -722,8 +722,15 @@ function buildReportCard(st,forPrint){
   const fsXS= fp?'7.5px':'10px';
   const cellPad = fp?'2px 5px':'5px 8px';
   const cellPadL= fp?'2px 5px 2px 12px':'5px 8px 5px 18px';
-  const evW = fp?'28px':'48px';
   const hdrPad = fp?'3px 8px':'5px 12px';
+
+  // Column widths as PERCENTAGES (not px) so the table always totals 100%
+  // regardless of how many evaluation columns exist across one or two semesters.
+  // Mixing width:auto + fixed px (the old approach) is what caused headers to
+  // misalign / get clipped once a second semester group was added.
+  const totalEvalCols = usedEvals.length;
+  const critColPct = fp ? 24 : 22;
+  const evalColPct = totalEvalCols>0 ? ((100-critColPct)/totalEvalCols) : 0;
 
   function thSt(center){
     return `padding:${fp?'4px 5px':'6px 8px'};background:${LGRAY};font-size:${fsXS};font-weight:700;`+
@@ -765,8 +772,8 @@ function buildReportCard(st,forPrint){
   html+=`<table style="width:100%;border-collapse:collapse;font-size:${fs};`+
         `margin-bottom:${fp?'5px':'10px'};border:1px solid ${MGRAY};table-layout:fixed">
     <colgroup>
-      <col style="width:auto">
-      ${usedEvals.map(()=>`<col style="width:${evW}">`).join('')}
+      <col style="width:${critColPct}%">
+      ${usedEvals.map(()=>`<col style="width:${evalColPct}%">`).join('')}
     </colgroup>
     <thead>`;
 
