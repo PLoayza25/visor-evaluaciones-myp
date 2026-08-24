@@ -92,24 +92,26 @@ tr:hover td{background:#f5f3ef}
 .pill{font-size:10px;font-weight:600;font-family:'IBM Plex Mono',monospace;padding:2px 7px;border-radius:10px;background:var(--badge-low);color:var(--badge-low-text)}
 
 /* ── STUDENT CARD ── */
-.student-card{background:var(--surface);border:1px solid var(--rule);border-radius:6px;padding:20px;margin-bottom:16px;page-break-inside:avoid}
-.student-card h3{font-size:15px;font-weight:600;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--rule)}
+.student-card{background:var(--surface);border:1px solid var(--rule);border-radius:6px;margin-bottom:16px;page-break-inside:avoid;overflow:hidden}
 .student-card table{font-size:11px}
 
 /* ── UPLOAD SCREEN ── */
 #upload-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:40px 20px;background:var(--bg)}
 .upload-logo{font-size:12px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:48px}
 .upload-logo span{color:var(--accent)}
-.upload-card{background:var(--surface);border:1px solid var(--rule);border-radius:12px;padding:44px;max-width:500px;width:100%;text-align:center}
+.upload-card{background:var(--surface);border:1px solid var(--rule);border-radius:12px;padding:44px;max-width:560px;width:100%;text-align:center}
 .upload-card h1{font-size:20px;font-weight:600;margin-bottom:8px}
 .upload-card p{color:var(--muted);font-size:13px;line-height:1.7;margin-bottom:24px}
-.upload-zone{border:2px dashed var(--faint);border-radius:8px;padding:26px;margin-bottom:16px;cursor:pointer;transition:all .2s;position:relative}
+.sem-upload-row{display:flex;gap:12px;margin-bottom:16px}
+.upload-zone{border:2px dashed var(--faint);border-radius:8px;padding:22px 10px;cursor:pointer;transition:all .2s;position:relative;flex:1}
 .upload-zone:hover{border-color:var(--accent)}
+.upload-zone.loaded{border-color:var(--ok);border-style:solid;background:#f2f8f2}
 .upload-zone input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
-.upload-zone-label{font-size:13px;color:var(--muted)}
-.upload-zone-label strong{color:var(--accent);font-weight:500}
+.upload-zone-label{font-size:13px;color:var(--muted);word-break:break-word}
+.upload-zone-label strong{color:var(--ink);font-weight:600;display:block;margin-bottom:2px}
 .upload-note{font-size:11px;color:var(--muted);opacity:.6}
 .upload-error{background:var(--badge-low);border:1px solid #f5c6c6;color:var(--danger);font-size:12px;padding:10px 14px;border-radius:6px;margin-top:12px;display:none;text-align:left}
+#btn-continue{transition:opacity .2s}
 
 /* ── PRINT ── */
 @media print{
@@ -130,19 +132,32 @@ tr:hover td{background:#f5f3ef}
 <!-- ════ UPLOAD SCREEN ════ -->
 <div id="upload-screen">
   <div class="upload-logo">Visor <span>MYP</span> · Evaluaciones</div>
-  <div class="upload-card" id="drop-zone">
+  <div class="upload-card">
     <div style="font-size:44px;margin-bottom:14px;opacity:.7">📊</div>
-    <h1>Cargar planilla de evaluaciones</h1>
-    <p>Sube el archivo Excel exportado desde el sistema escolar.<br>
-    Se detectarán automáticamente estudiantes, asignaturas y criterios.</p>
-    <div class="upload-zone">
-      <input type="file" id="file-input" accept=".xls,.xlsx" />
-      <div class="upload-zone-label">
-        <strong>Haz clic para seleccionar</strong> o arrastra el archivo aquí<br>
-        <span style="font-size:11px;opacity:.6;display:block;margin-top:4px">Formatos: .xls · .xlsx</span>
+    <h1>Cargar planilla(s) de evaluaciones</h1>
+    <p>Sube el archivo del 1er semestre, el del 2do semestre, o ambos — cada uno es independiente y opcional.<br>
+    Si subes los dos, el informe mostrará los resultados en dos columnas.</p>
+
+    <div class="sem-upload-row">
+      <div class="upload-zone" id="zone-1">
+        <input type="file" id="file-input-1" accept=".xls,.xlsx" />
+        <div class="upload-zone-label" id="label-1">
+          <strong>1er Semestre</strong>
+          <span style="font-size:11px;opacity:.6">Clic o arrastra el archivo</span>
+        </div>
+      </div>
+      <div class="upload-zone" id="zone-2">
+        <input type="file" id="file-input-2" accept=".xls,.xlsx" />
+        <div class="upload-zone-label" id="label-2">
+          <strong>2do Semestre</strong>
+          <span style="font-size:11px;opacity:.6">Clic o arrastra el archivo</span>
+        </div>
       </div>
     </div>
-    <div class="upload-note">Estructura esperada: fila de encabezado con nombres · col A = Área · col B = Criterio/Evaluación</div>
+
+    <button class="btn btn-primary" id="btn-continue" style="width:100%;opacity:.4;pointer-events:none" onclick="continueToApp()">Continuar →</button>
+
+    <div class="upload-note" style="margin-top:14px">Estructura esperada: fila de encabezado con nombres · col A = Área · col B = Criterio/Evaluación. Si subes ambos semestres, los nombres de alumnos y de asignaturas deben coincidir entre los dos archivos para combinarse correctamente.</div>
     <div class="upload-error" id="upload-error"></div>
   </div>
 </div>
@@ -257,25 +272,29 @@ tr:hover td{background:#f5f3ef}
 
 <script>
 // ════════════════════════════
-//  UPLOAD
+//  UPLOAD  (dos semestres, cada uno opcional e independiente)
 // ════════════════════════════
 let DATA = null;
+let pending = {1:null, 2:null};
 
-const dropZone = document.getElementById('drop-zone');
-const fileInput = document.getElementById('file-input');
 const uploadError = document.getElementById('upload-error');
-
-dropZone.addEventListener('dragover', e=>{e.preventDefault();dropZone.style.borderColor='var(--accent)'});
-dropZone.addEventListener('dragleave', ()=>{dropZone.style.borderColor=''});
-dropZone.addEventListener('drop', e=>{
-  e.preventDefault(); dropZone.style.borderColor='';
-  if(e.dataTransfer.files[0]) processFile(e.dataTransfer.files[0]);
-});
-fileInput.addEventListener('change', ()=>{if(fileInput.files[0]) processFile(fileInput.files[0])});
-
 function showError(msg){uploadError.style.display='block';uploadError.textContent='⚠️ '+msg}
 
-function processFile(file){
+function setupZone(sem){
+  const zone=document.getElementById('zone-'+sem);
+  const input=document.getElementById('file-input-'+sem);
+  zone.addEventListener('dragover', e=>{e.preventDefault();zone.style.borderColor='var(--accent)'});
+  zone.addEventListener('dragleave', ()=>{if(!zone.classList.contains('loaded'))zone.style.borderColor=''});
+  zone.addEventListener('drop', e=>{
+    e.preventDefault(); if(!zone.classList.contains('loaded'))zone.style.borderColor='';
+    if(e.dataTransfer.files[0]) processFile(e.dataTransfer.files[0], sem);
+  });
+  input.addEventListener('change', ()=>{if(input.files[0]) processFile(input.files[0], sem)});
+}
+setupZone(1);
+setupZone(2);
+
+function processFile(file, sem){
   uploadError.style.display='none';
   if(!/\.(xls|xlsx)$/i.test(file.name)){showError('El archivo debe ser .xls o .xlsx');return}
   const reader=new FileReader();
@@ -284,12 +303,50 @@ function processFile(file){
       const wb=XLSX.read(e.target.result,{type:'array'});
       const ws=wb.Sheets[wb.SheetNames[0]];
       const raw=XLSX.utils.sheet_to_json(ws,{header:1,defval:null});
-      DATA=parseSheet(raw,file.name);
-      if(!DATA) return;
-      initApp();
+      const parsed=parseSheet(raw,file.name);
+      if(!parsed) return;
+      parsed.records.forEach(r=>{r.semester=sem});
+      pending[sem]=parsed;
+      markZoneLoaded(sem,file.name);
+      updateContinueBtn();
     }catch(err){showError('Error al leer el archivo: '+err.message)}
   };
   reader.readAsArrayBuffer(file);
+}
+
+function markZoneLoaded(sem,filename){
+  const zone=document.getElementById('zone-'+sem);
+  const label=document.getElementById('label-'+sem);
+  zone.classList.add('loaded');
+  zone.style.borderColor='';
+  label.innerHTML=`<strong>✓ ${sem===1?'1er':'2do'} Semestre</strong><span style="font-size:11px;opacity:.7">${filename}</span>`;
+}
+
+function updateContinueBtn(){
+  const btn=document.getElementById('btn-continue');
+  if(pending[1]||pending[2]){btn.style.opacity='1';btn.style.pointerEvents='auto'}
+  else{btn.style.opacity='.4';btn.style.pointerEvents='none'}
+}
+
+function continueToApp(){
+  if(!pending[1]&&!pending[2]) return;
+  DATA=mergeSemesters(pending[1],pending[2]);
+  initApp();
+}
+
+function mergeSemesters(d1,d2){
+  const parts=[d1,d2].filter(Boolean);
+  const students=[];
+  parts.forEach(p=>p.students.forEach(s=>{if(!students.includes(s)) students.push(s)}));
+  const records=[];
+  parts.forEach(p=>records.push(...p.records));
+  const title=(d1&&d1.title)||(d2&&d2.title)||'Informe MYP';
+  const periodParts=[];
+  if(d1) periodParts.push('1er Semestre'+(d1.period?': '+d1.period:''));
+  if(d2) periodParts.push('2do Semestre'+(d2.period?': '+d2.period:''));
+  const period=periodParts.join('  ·  ');
+  const filename=parts.map(p=>p.filename).join(' + ');
+  return {students,records,title,period,filename,hasSem1:!!d1,hasSem2:!!d2};
 }
 
 function parseSheet(raw,filename){
@@ -400,15 +457,8 @@ function parseFormatB(raw,filename){
   }
   if(!colMap.length){showError('No se encontraron columnas de evaluación.');return null}
 
-  // The area row may also contain criteria info — check if there's a criteria row
-  // between areaRow and headerRow. If headerRow-1 has areas and headerRow has evals,
-  // criteria might be in headerRow-2 or embedded in area names.
-  // For now treat area as-is (may include criteria in name).
-
   // Collect students and scores
   const students=[];
-  // records: for each column group, build {area, criteria, eval, values}
-  // We'll accumulate per (area, eval) combination
   const colRecords={};
   colMap.forEach(cm=>{
     const key=cm.area+'|||'+cm.eval;
@@ -438,7 +488,6 @@ function parseFormatB(raw,filename){
   const records=Object.values(colRecords).filter(r=>Object.keys(r.values).length>0);
   if(!records.length){showError('No se encontraron evaluaciones con datos en el archivo.');return null}
 
-  // Clean up records (remove internal cols array)
   records.forEach(r=>delete r.cols);
   return{students,records,filename,title,period};
 }
@@ -454,16 +503,25 @@ function initApp(){
 
 function resetApp(){
   DATA=null;
+  pending={1:null,2:null};
   document.getElementById('upload-screen').style.display='flex';
   document.getElementById('app-wrap').style.display='none';
-  fileInput.value='';uploadError.style.display='none';
+  [1,2].forEach(sem=>{
+    document.getElementById('file-input-'+sem).value='';
+    const zone=document.getElementById('zone-'+sem);
+    zone.classList.remove('loaded');
+    zone.style.borderColor='';
+    document.getElementById('label-'+sem).innerHTML=
+      `<strong>${sem===1?'1er':'2do'} Semestre</strong><span style="font-size:11px;opacity:.6">Clic o arrastra el archivo</span>`;
+  });
+  updateContinueBtn();
+  uploadError.style.display='none';
 }
 
 // ════════════════════════════
 //  INIT SELECTS
 // ════════════════════════════
 function initSelects(){
-  // FIX: define areas from DATA here, not as a global
   const areas=[...new Set(DATA.records.map(r=>r.area))];
 
   const sa=document.getElementById('sel-area');
@@ -503,6 +561,17 @@ function scoreCell(v){
   return `<td class="num${v<4?' low':''}">${v}</td>`;
 }
 
+// Unique evaluation labels (E1, E2…) that exist for a given semester (1 or 2)
+function getEvalsForSemester(sem){
+  const list=[];
+  DATA.records.forEach(r=>{
+    if(r.semester!==sem) return;
+    const ev=abbrevEval(r.eval);
+    if(!list.includes(ev)) list.push(ev);
+  });
+  return list;
+}
+
 // ════════════════════════════
 //  PANEL NAVIGATION
 // ════════════════════════════
@@ -527,13 +596,30 @@ function renderAsignatura(){
   const filterCrit=document.getElementById('sel-criteria').value;
   const recs=DATA.records.filter(r=>r.area===area&&(!filterCrit||r.criteria===filterCrit));
   if(!recs.length){document.getElementById('table-asignatura').innerHTML='<p style="color:var(--muted);padding:20px">Sin datos.</p>';return}
-  const cols=recs.map(r=>({criteria:r.criteria,eval:abbrevEval(r.eval),rec:r}));
-  let html=`<div class="table-wrap"><table><thead><tr><th>Estudiante</th>`;
-  cols.forEach(c=>{html+=`<th title="${c.criteria} · ${c.rec.eval}">${c.criteria.split('.')[0]} ${c.eval}</th>`});
-  html+=`</tr></thead><tbody>`;
+
+  const cols1=recs.filter(r=>r.semester===1).map(r=>({criteria:r.criteria,eval:abbrevEval(r.eval),rec:r}));
+  const cols2=recs.filter(r=>r.semester===2).map(r=>({criteria:r.criteria,eval:abbrevEval(r.eval),rec:r}));
+  const allCols=[...cols1,...cols2];
+  const hasBoth=cols1.length>0&&cols2.length>0;
+
+  let html=`<div class="table-wrap"><table><thead>`;
+  if(hasBoth){
+    html+=`<tr>
+      <th rowspan="2" style="vertical-align:bottom">Estudiante</th>
+      ${cols1.length?`<th colspan="${cols1.length}" style="text-align:center;background:#1a1a1a;color:#fff">1er Semestre</th>`:''}
+      ${cols2.length?`<th colspan="${cols2.length}" style="text-align:center;background:#1a1a1a;color:#fff">2do Semestre</th>`:''}
+    </tr><tr>`;
+    allCols.forEach(c=>{html+=`<th title="${c.criteria} · ${c.rec.eval}">${c.criteria.split('.')[0]} ${c.eval}</th>`});
+    html+=`</tr>`;
+  }else{
+    html+=`<tr><th>Estudiante</th>`;
+    allCols.forEach(c=>{html+=`<th title="${c.criteria} · ${c.rec.eval}">${c.criteria.split('.')[0]} ${c.eval}</th>`});
+    html+=`</tr>`;
+  }
+  html+=`</thead><tbody>`;
   DATA.students.forEach(st=>{
     html+=`<tr><td class="bold">${st}</td>`;
-    cols.forEach(c=>{html+=scoreCell(c.rec.values[st]??null)});
+    allCols.forEach(c=>{html+=scoreCell(c.rec.values[st]??null)});
     html+=`</tr>`;
   });
   html+=`</tbody></table></div>`;
@@ -543,18 +629,10 @@ function renderAsignatura(){
 // ════════════════════════════
 //  VIEW 2: POR ESTUDIANTE — Redland Report Card
 // ════════════════════════════
-function abbrevEval(e){return e.replace(/evaluaci[oó]n\s*/i,'E')}
-
 function renderEstudiante(){
   if(!DATA) return;
   const st=document.getElementById('sel-student').value;
   document.getElementById('table-estudiante').innerHTML=buildReportCard(st,false);
-}
-
-function getAllEvals(){
-  const all=[];
-  DATA.records.forEach(r=>{const ev=abbrevEval(r.eval);if(!all.includes(ev)) all.push(ev)});
-  return all;
 }
 
 // ── MYP standard criteria per subject ──
@@ -584,7 +662,6 @@ function getFullCriteria(area){
   const key = Object.keys(MYP_CRITERIA).find(k => area.toLowerCase().includes(k));
   const standard = key ? MYP_CRITERIA[key] : [];
   const fromData = [...new Set(DATA.records.filter(r=>r.area===area).map(r=>r.criteria))];
-  // Merge: start with standard, add any from data not already in standard
   const merged = [...standard];
   fromData.forEach(c=>{ if(!merged.includes(c)) merged.push(c); });
   return merged;
@@ -600,39 +677,40 @@ const GUARANTEED_AREAS = ['Educación Física'];
 
 function buildReportCard(st,forPrint){
   const RED='#9b1c1c', BLACK='#1a1a1a', LGRAY='#f0f0f0', MGRAY='#d0d0d0', DGRAY='#444';
-  const allEvals=getAllEvals();
   const dataAreas=[...new Set(DATA.records.map(r=>r.area))];
+
+  // Evaluation columns split by semester
+  const evals1=getEvalsForSemester(1);
+  const evals2=getEvalsForSemester(2);
+  const hasSem1=evals1.length>0, hasSem2=evals2.length>0;
+  const usedEvals=[...evals1,...evals2];
 
   // Build sorted area list: known order first, guaranteed areas always included
   const seenAreas=new Set();
   const sortedAreas=[];
 
-  // 1. Add areas in MYP_ORDER that exist in data
   MYP_ORDER.forEach(o=>{
     const match=dataAreas.find(d=>d.toLowerCase().includes(o.toLowerCase())||o.toLowerCase().includes(d.toLowerCase()));
     if(match&&!seenAreas.has(match)){seenAreas.add(match);sortedAreas.push(match);}
   });
 
-  // 2. Add any data areas not yet included
   dataAreas.forEach(a=>{if(!seenAreas.has(a)){seenAreas.add(a);sortedAreas.push(a);}});
 
-  // 3. Always add GUARANTEED_AREAS at end if not already present
   GUARANTEED_AREAS.forEach(g=>{
     const already=sortedAreas.some(a=>a.toLowerCase().includes(g.toLowerCase())||g.toLowerCase().includes(a.toLowerCase()));
     if(!already){sortedAreas.push(g);}
   });
 
-  // area → criteria → {E1:v,…}
+  // area → criteria → semester → {E1:v,…}
   const byArea={};
   DATA.records.forEach(r=>{
     if(!byArea[r.area]) byArea[r.area]={};
-    if(!byArea[r.area][r.criteria]) byArea[r.area][r.criteria]={};
+    if(!byArea[r.area][r.criteria]) byArea[r.area][r.criteria]={1:{},2:{}};
     const ev=abbrevEval(r.eval);
     const v=r.values[st];
-    if(v!=null) byArea[r.area][r.criteria][ev]=v;
+    if(v!=null) byArea[r.area][r.criteria][r.semester][ev]=v;
   });
 
-  const usedEvals=allEvals;
   const OTRAS_FIXED=['Deportes','Religión (Católica)','Mundo de Religiones','Orientación'];
 
   const today=new Date().toLocaleDateString('es-CL',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
@@ -651,6 +729,10 @@ function buildReportCard(st,forPrint){
     return `padding:${fp?'4px 5px':'6px 8px'};background:${LGRAY};font-size:${fsXS};font-weight:700;`+
            `border-bottom:1.5px solid ${BLACK};color:${BLACK};`+
            `text-align:${center?'center':'left'};white-space:nowrap`;
+  }
+  function thGroup(){
+    return `padding:${fp?'3px 5px':'5px 8px'};background:${BLACK};color:#fff;font-size:${fsXS};font-weight:700;`+
+           `border-bottom:1.5px solid ${BLACK};text-align:center;white-space:nowrap`;
   }
   function tdNum(v){
     if(v==null) return `<td style="text-align:center;padding:${cellPad};border-bottom:1px solid ${MGRAY};color:#ccc;font-size:${fsXS}">—</td>`;
@@ -686,21 +768,36 @@ function buildReportCard(st,forPrint){
       <col style="width:auto">
       ${usedEvals.map(()=>`<col style="width:${evW}">`).join('')}
     </colgroup>
-    <thead><tr>
+    <thead>`;
+
+  if(hasSem1&&hasSem2){
+    html+=`<tr>
+      <th rowspan="2" style="${thSt(false)};vertical-align:bottom">Asignatura / Criterio</th>
+      ${hasSem1?`<th colspan="${evals1.length}" style="${thGroup()}">1er Semestre</th>`:''}
+      ${hasSem2?`<th colspan="${evals2.length}" style="${thGroup()}">2do Semestre</th>`:''}
+    </tr><tr>
+      ${usedEvals.map(ev=>`<th style="${thSt(true)}">${ev}</th>`).join('')}
+    </tr>`;
+  }else{
+    html+=`<tr>
       <th style="${thSt(false)}">Asignatura / Criterio</th>
       ${usedEvals.map(ev=>`<th style="${thSt(true)}">${ev}</th>`).join('')}
-    </tr></thead><tbody>`;
+    </tr>`;
+  }
+  html+=`</thead><tbody>`;
 
   sortedAreas.forEach(area=>{
     const allCrits=getFullCriteria(area);
     html+=`<tr><td colspan="${usedEvals.length+1}" style="background:${RED};color:#fff;font-weight:600;`+
           `padding:${fp?'2px 8px':'4px 12px'};font-size:${fsS}">${area}</td></tr>`;
     allCrits.forEach(crit=>{
-      const evMap=(byArea[area]&&byArea[area][crit])||{};
+      const sem1Map=(byArea[area]&&byArea[area][crit]&&byArea[area][crit][1])||{};
+      const sem2Map=(byArea[area]&&byArea[area][crit]&&byArea[area][crit][2])||{};
       html+=`<tr>
         <td style="padding:${cellPadL};border-bottom:1px solid ${MGRAY};color:${DGRAY};`+
              `font-size:${fsS};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${crit}</td>
-        ${usedEvals.map(ev=>tdNum(evMap[ev]??null)).join('')}
+        ${evals1.map(ev=>tdNum(sem1Map[ev]??null)).join('')}
+        ${evals2.map(ev=>tdNum(sem2Map[ev]??null)).join('')}
       </tr>`;
     });
   });
@@ -805,7 +902,7 @@ function renderAlertas(){
     Object.entries(r.values).forEach(([st,v])=>{
       if(v<4){
         if(!alerts[st]) alerts[st]=[];
-        alerts[st].push({area:r.area,criteria:r.criteria,eval:abbrevEval(r.eval),v});
+        alerts[st].push({area:r.area,criteria:r.criteria,eval:abbrevEval(r.eval),v,sem:r.semester});
       }
     });
   });
@@ -818,7 +915,7 @@ function renderAlertas(){
   if(!count){document.getElementById('list-alertas').innerHTML='<p style="color:var(--ok);padding:16px">✓ Ningún estudiante tiene resultados bajo 4.</p>';return}
   let html='';
   Object.entries(alerts).sort((a,b)=>b[1].length-a[1].length).forEach(([st,items])=>{
-    const pills=items.map(i=>`<span class="pill" title="${i.area} · ${i.criteria}">${i.area.split(' ')[0]} ${i.eval}: ${i.v}</span>`).join('');
+    const pills=items.map(i=>`<span class="pill" title="${i.area} · ${i.criteria} · ${i.sem===2?'2do':'1er'} Semestre">${i.sem===2?'S2':'S1'} ${i.eval}: ${i.v}</span>`).join('');
     html+=`<div class="alert-item"><div><div class="name">${st}</div><div class="detail">${items.length} resultado${items.length>1?'s':''} bajo 4</div></div><div class="pills">${pills}</div></div>`;
   });
   document.getElementById('list-alertas').innerHTML=html;
@@ -836,19 +933,19 @@ function renderListado(){
     if(fa&&r.area!==fa) return;
     Object.entries(r.values).forEach(([st,v])=>{
       if(q&&!st.toLowerCase().includes(q)) return;
-      rows.push({st,area:r.area,criteria:r.criteria,eval:abbrevEval(r.eval),v});
+      rows.push({st,area:r.area,criteria:r.criteria,eval:abbrevEval(r.eval),v,sem:r.semester});
     });
   });
-  rows.sort((a,b)=>a.st.localeCompare(b.st)||a.area.localeCompare(b.area));
-  let html=`<div class="table-wrap"><table><thead><tr><th>Estudiante</th><th>Asignatura</th><th>Criterio</th><th>Eval.</th><th class="num">Resultado</th></tr></thead><tbody>`;
-  rows.forEach(r=>{html+=`<tr><td class="bold">${r.st}</td><td>${r.area}</td><td>${r.criteria}</td><td>${r.eval}</td>${scoreCell(r.v)}</tr>`});
+  rows.sort((a,b)=>a.st.localeCompare(b.st)||a.area.localeCompare(b.area)||(a.sem-b.sem));
+  let html=`<div class="table-wrap"><table><thead><tr><th>Estudiante</th><th>Asignatura</th><th>Criterio</th><th>Eval.</th><th>Semestre</th><th class="num">Resultado</th></tr></thead><tbody>`;
+  rows.forEach(r=>{html+=`<tr><td class="bold">${r.st}</td><td>${r.area}</td><td>${r.criteria}</td><td>${r.eval}</td><td>${r.sem===2?'2do':'1er'}</td>${scoreCell(r.v)}</tr>`});
   html+=`</tbody></table></div>`;
   document.getElementById('table-listado').innerHTML=html;
 }
 
 // ════════════════════════════
 //  VIEW 5: FICHAS
-//  Usa la misma estructura que buildEstudianteTable
+//  Usa el mismo informe que la vista "Por estudiante" (versión compacta para imprimir)
 // ════════════════════════════
 function renderFichas(){
   if(!DATA) return;
@@ -858,11 +955,7 @@ function renderFichas(){
   students.forEach(st=>{
     const allVals=DATA.records.map(r=>r.values[st]).filter(v=>v!=null);
     if(!allVals.length) return;
-    const lowCount=allVals.filter(v=>v<4).length;
-    html+=`<div class="student-card">
-      <h3>${st}${lowCount>0?` &nbsp;<span class="badge badge-low">${lowCount} resultado${lowCount>1?'s':''} bajo 4</span>`:''}</h3>
-      ${buildEstudianteTable(st,false)}
-    </div>`;
+    html+=`<div class="student-card">${buildReportCard(st,true)}</div>`;
   });
   document.getElementById('fichas-container').innerHTML=html||'<p style="color:var(--muted)">Sin datos.</p>';
 }
