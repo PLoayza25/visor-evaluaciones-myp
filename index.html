@@ -6,6 +6,7 @@
 <title>Visor de Evaluaciones MYP</title>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -177,6 +178,7 @@ tr:hover td{background:#f5f3ef}
     <div class="nav-section">Vistas</div>
     <button class="nav-btn active" onclick="showPanel('asignatura')">📚 Por asignatura</button>
     <button class="nav-btn" onclick="showPanel('estudiante')">👤 Por estudiante</button>
+    <button class="nav-btn" onclick="showPanel('progreso')">📈 Progreso del estudiante</button>
     <button class="nav-btn" onclick="showPanel('alertas')">⚠️ Resultados &lt; 4</button>
     <button class="nav-btn" onclick="showPanel('listado')">📋 Listado completo</button>
     <button class="nav-btn" onclick="showPanel('fichas')">🖨️ Fichas individuales</button>
@@ -216,6 +218,22 @@ tr:hover td{background:#f5f3ef}
     </div>
   </div>
   <div id="table-estudiante"></div>
+</div>
+
+<!-- PROGRESO DEL ESTUDIANTE -->
+<div id="panel-progreso" class="panel">
+  <div class="page-header">
+    <div>
+      <div class="page-title">Progreso del estudiante</div>
+      <div class="page-sub">Evolución de cada criterio, por asignatura — cada criterio se grafica por separado</div>
+    </div>
+    <div class="controls">
+      <select id="sel-student-prog" onchange="renderProgreso()"></select>
+      <button class="btn no-print" onclick="printProgreso(false)">🖨️ Imprimir este</button>
+      <button class="btn btn-primary no-print" id="btn-prog-todos" onclick="printProgreso(true)">🖨️ Imprimir todos</button>
+    </div>
+  </div>
+  <div id="progreso-container"></div>
 </div>
 
 <!-- ALERTAS -->
@@ -394,7 +412,8 @@ function parseFormatA(raw,filename){
     const comp=row[1]!=null?String(row[1]).trim():'';
     if(areaVal&&areaVal!=='nan') currentArea=areaVal;
     if(!comp||comp==='nan'||/MYP Assessment/i.test(comp)) continue;
-    if(!/evaluaci[oó]n/i.test(comp)){currentCriteria=comp;continue}
+    // Fila de evaluación = "Evaluación N". Un criterio como "D. Evaluación" NO es evaluación.
+    if(!/^evaluaci[oó]n\s*\d+/i.test(comp)){currentCriteria=comp;continue}
     const values={};
     for(let si=0;si<students.length;si++){
       const v=row[2+si];
@@ -537,6 +556,10 @@ function initSelects(){
   sf.innerHTML='<option value="todos">Todos los estudiantes</option>';
   DATA.students.forEach(s=>{const o=document.createElement('option');o.value=s;o.textContent=s;sf.appendChild(o)});
 
+  const sp=document.getElementById('sel-student-prog');
+  sp.innerHTML='';
+  DATA.students.forEach(s=>{const o=document.createElement('option');o.value=s;o.textContent=s;sp.appendChild(o)});
+
   const fal=document.getElementById('filter-area-listado');
   fal.innerHTML='<option value="">Todas las asignaturas</option>';
   areas.forEach(a=>{const o=document.createElement('option');o.value=a;o.textContent=a;fal.appendChild(o)});
@@ -582,6 +605,7 @@ function showPanel(name){
   event.target.classList.add('active');
   if(name==='asignatura') renderAsignatura();
   if(name==='estudiante') renderEstudiante();
+  if(name==='progreso') renderProgreso();
   if(name==='alertas') renderAlertas();
   if(name==='listado') renderListado();
   if(name==='fichas') renderFichas();
@@ -897,6 +921,191 @@ function openPrintWindow(students){
   <scr`+`ipt>window.onload=()=>{window.print();window.onafterprint=()=>window.close()}</scr`+`ipt>
   </body></html>`);
   win.document.close();
+}
+
+// ════════════════════════════
+//  VIEW: PROGRESO DEL ESTUDIANTE
+//  Un gráfico de líneas por criterio, agrupados por asignatura.
+//  Solo datos del propio estudiante (sin promedios ni comparaciones).
+// ════════════════════════════
+const PROG_COLORS={A:'#9b1c1c',B:'#1a1a1a',C:'#5a5a5a',D:'#c0504d'};
+
+function critLetter(c){const m=String(c).trim().match(/^([A-Za-z])\s*\./);return m?m[1].toUpperCase():''}
+function evalNum(e){const m=String(e).match(/\d+/);return m?+m[0]:0}
+
+// Asignaturas en orden MYP (misma lógica que el informe por estudiante)
+function getSortedAreasProg(){
+  const dataAreas=[...new Set(DATA.records.map(r=>r.area))];
+  const seen=new Set(), out=[];
+  MYP_ORDER.forEach(o=>{
+    const m=dataAreas.find(d=>d.toLowerCase().includes(o.toLowerCase())||o.toLowerCase().includes(d.toLowerCase()));
+    if(m&&!seen.has(m)){seen.add(m);out.push(m)}
+  });
+  dataAreas.forEach(a=>{if(!seen.has(a)){seen.add(a);out.push(a)}});
+  GUARANTEED_AREAS.forEach(g=>{
+    if(!out.some(a=>a.toLowerCase().includes(g.toLowerCase())||g.toLowerCase().includes(a.toLowerCase()))) out.push(g);
+  });
+  return out;
+}
+
+// Criterios de la asignatura: uno por letra (A–D). Si la planilla trae un nombre
+// distinto al estándar para la misma letra, se usa el de la planilla.
+function getCriteriaProg(area){
+  const key=Object.keys(MYP_CRITERIA).find(k=>area.toLowerCase().includes(k));
+  const standard=key?MYP_CRITERIA[key]:[];
+  const fromData=[...new Set(DATA.records.filter(r=>r.area===area).map(r=>r.criteria))];
+  const out=[];
+  standard.forEach(s=>{
+    const L=critLetter(s);
+    const d=fromData.find(c=>L&&critLetter(c)===L);
+    out.push(d||s);
+  });
+  fromData.forEach(c=>{if(!out.includes(c)) out.push(c)});
+  return out;
+}
+
+// Serie de un criterio para un estudiante: evaluaciones en orden (S1 → S2, E1 → En)
+function getSeriesProg(area,crit,st){
+  const both=DATA.hasSem1&&DATA.hasSem2;
+  const recs=DATA.records
+    .filter(r=>r.area===area&&r.criteria===crit)
+    .sort((a,b)=>(a.semester-b.semester)||(evalNum(a.eval)-evalNum(b.eval)));
+  const labels=recs.map(r=>(both?`S${r.semester} `:'')+abbrevEval(r.eval));
+  const values=recs.map(r=>r.values[st]??null);
+  return {labels,values,hasRecords:recs.length>0,hasValues:values.some(v=>v!=null)};
+}
+
+// Dibuja el gráfico en un canvas oculto y lo devuelve como imagen (sirve para pantalla e impresión)
+const progValueLabels={
+  id:'progValueLabels',
+  afterDatasetsDraw(chart){
+    const {ctx}=chart;
+    const meta=chart.getDatasetMeta(0);
+    const data=chart.data.datasets[0].data;
+    ctx.save();
+    ctx.font='bold 12px Arial';
+    ctx.fillStyle='#1a1a1a';
+    ctx.textAlign='center';
+    ctx.textBaseline='bottom';
+    meta.data.forEach((pt,i)=>{if(data[i]!=null) ctx.fillText(data[i],pt.x,pt.y-8)});
+    ctx.restore();
+  }
+};
+
+function chartImageProg(series,color,h){
+  const holder=document.getElementById('prog-chart-holder')||(()=>{
+    const d=document.createElement('div');d.id='prog-chart-holder';
+    d.style.cssText='position:fixed;left:-10000px;top:0;width:400px;height:200px;';
+    document.body.appendChild(d);return d;
+  })();
+  const canvas=document.createElement('canvas');
+  canvas.width=360;canvas.height=h||180;
+  holder.appendChild(canvas);
+  const chart=new Chart(canvas,{
+    type:'line',
+    data:{labels:series.labels,datasets:[{
+      data:series.values,borderColor:color,backgroundColor:color,
+      borderWidth:2.5,pointRadius:4.5,pointHoverRadius:4.5,tension:0,spanGaps:true,clip:false
+    }]},
+    options:{
+      responsive:false,animation:false,devicePixelRatio:2,
+      layout:{padding:{top:24,right:8,left:2,bottom:0}},
+      plugins:{legend:{display:false},tooltip:{enabled:false}},
+      scales:{
+        y:{min:0,max:8,ticks:{stepSize:2,font:{size:11},color:'#666'},grid:{color:'#ececec'},border:{display:false}},
+        x:{offset:true,ticks:{font:{size:11},color:'#444',maxRotation:0,autoSkip:false},grid:{display:false}}
+      }
+    },
+    plugins:[progValueLabels]
+  });
+  const url=chart.toBase64Image('image/png');
+  chart.destroy();
+  canvas.remove();
+  return url;
+}
+
+function buildProgressReport(st,fp){
+  const RED='#9b1c1c', BLACK='#1a1a1a', MGRAY='#d0d0d0', DGRAY='#444';
+  const fsS=fp?'8px':'11px', fsXS=fp?'7px':'10px';
+  let html=`<div style="font-family:${fp?'Arial':'IBM Plex Sans'},sans-serif;color:${BLACK};max-width:${fp?'100%':'980px'}">`;
+
+  // Encabezado Redland
+  html+=`<div style="text-align:center;padding:${fp?'4px 0 4px':'12px 0 8px'};border-bottom:3px solid ${RED};margin-bottom:${fp?'6px':'12px'}">
+    <div style="font-size:${fp?'18px':'26px'};font-weight:700;letter-spacing:-.5px">Redland School</div>
+    <div style="font-size:${fp?'11px':'14px'};font-weight:600;color:${RED};margin-top:1px">Informe MYP — Progreso por Criterio</div>
+    <div style="font-size:${fp?'8px':'11px'};color:${DGRAY};margin-top:2px">${DATA.period||''}</div>
+  </div>`;
+  html+=`<div style="display:flex;justify-content:space-between;align-items:center;border:1.5px solid ${BLACK};`+
+        `padding:${fp?'4px 8px':'7px 14px'};margin-bottom:${fp?'6px':'14px'}">
+    <span style="font-size:${fp?'10px':'14px'}"><strong>Nombre:</strong>&nbsp;&nbsp;${st}</span>
+    <span style="font-size:${fp?'9px':'12px'};color:${DGRAY};font-weight:600">${DATA.title||''}</span>
+  </div>`;
+
+  getSortedAreasProg().forEach(area=>{
+    const crits=getCriteriaProg(area);
+    const areaHasRecords=DATA.records.some(r=>r.area===area);
+    html+=`<div style="break-inside:avoid;page-break-inside:avoid;margin-bottom:${fp?'5px':'14px'}">`;
+    html+=`<div style="background:${RED};color:#fff;font-weight:600;padding:${fp?'2px 8px':'5px 12px'};font-size:${fp?'9px':'13px'}">${area}</div>`;
+    if(!areaHasRecords){
+      html+=`<div style="border:1px solid ${MGRAY};border-top:none;padding:${fp?'6px 8px':'12px'};font-size:${fsS};color:#999">Sin evaluaciones registradas en esta asignatura.</div></div>`;
+      return;
+    }
+    html+=`<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:${fp?'4px':'10px'};border:1px solid ${MGRAY};border-top:none;padding:${fp?'4px':'10px'}">`;
+    crits.forEach(crit=>{
+      const L=critLetter(crit);
+      const color=PROG_COLORS[L]||BLACK;
+      const s=getSeriesProg(area,crit,st);
+      html+=`<div style="min-width:0">
+        <div style="font-size:${fsXS};font-weight:700;color:${color};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px" title="${crit}">${crit}</div>`;
+      if(!s.hasRecords||!s.hasValues){
+        const msg=!s.hasRecords?'Sin evaluaciones registradas':'Sin notas para este estudiante';
+        html+=`<div style="aspect-ratio:${fp?'360/140':'2/1'};display:flex;align-items:center;justify-content:center;border:1px dashed ${MGRAY};font-size:${fsXS};color:#aaa;text-align:center;padding:4px">${msg}</div>`;
+      }else{
+        html+=`<img src="${chartImageProg(s,color,fp?140:180)}" style="width:100%;display:block" alt="${crit}">`;
+      }
+      html+=`</div>`;
+    });
+    html+=`</div></div>`;
+  });
+
+  html+=`</div>`;
+  return html;
+}
+
+function renderProgreso(){
+  if(!DATA) return;
+  const st=document.getElementById('sel-student-prog').value;
+  document.getElementById('progreso-container').innerHTML=
+    `<div style="background:var(--surface);border:1px solid var(--rule);border-radius:6px;padding:16px 20px">${buildProgressReport(st,false)}</div>`;
+}
+
+function printProgreso(all){
+  const students=all?DATA.students:[document.getElementById('sel-student-prog').value];
+  const btn=document.getElementById('btn-prog-todos');
+  const oldTxt=btn.textContent;
+  if(all){btn.textContent='Generando…';btn.disabled=true}
+  // Pequeña pausa para que el botón muestre "Generando…" antes del cálculo
+  setTimeout(()=>{
+    const body=students.map(st=>`<div class="block">${buildProgressReport(st,true)}</div>`).join('');
+    btn.textContent=oldTxt;btn.disabled=false;
+    const win=window.open('','_blank');
+    win.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+    <title>Progreso MYP — Redland School</title>
+    <style>
+      *{box-sizing:border-box;margin:0;padding:0}
+      body{font-family:Arial,sans-serif;color:#1a1a1a;background:#fff;padding:10px 14px}
+      .block{page-break-after:always}
+      .block:last-child{page-break-after:avoid}
+      @media print{
+        @page{size:A4;margin:9mm 10mm}
+        body{padding:0}
+        *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+      }
+    </style></head><body>${body}
+    <scr`+`ipt>window.onload=()=>{window.print();window.onafterprint=()=>window.close()}</scr`+`ipt>
+    </body></html>`);
+    win.document.close();
+  },30);
 }
 
 // ════════════════════════════
