@@ -6,7 +6,6 @@
 <title>Visor de Evaluaciones MYP</title>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -114,6 +113,16 @@ tr:hover td{background:#f5f3ef}
 .upload-error{background:var(--badge-low);border:1px solid #f5c6c6;color:var(--danger);font-size:12px;padding:10px 14px;border-radius:6px;margin-top:12px;display:none;text-align:left}
 #btn-continue{transition:opacity .2s}
 
+/* ── PUNTAJE FINAL (profesores) ── */
+.pf-login-card{background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:28px;max-width:420px;margin:12px 0}
+.pf-login-card label{font-size:12px;font-weight:600;display:block;margin-bottom:6px}
+.pf-login-card select,.pf-login-card input[type=password]{width:100%;margin-bottom:14px;padding:9px 10px;font-size:13px}
+.pf-score-input{width:58px;font-size:13px;padding:6px 6px;border:1px solid var(--rule);border-radius:4px;text-align:center;font-family:'IBM Plex Mono',monospace}
+.pf-score-input:focus{border-color:var(--accent)}
+.pf-table th,.pf-table td{font-size:12px}
+.pf-desc-cell{white-space:normal!important;max-width:340px;font-size:11.5px;line-height:1.4;color:var(--muted);text-align:left}
+.pf-hint{font-size:11.5px;color:var(--muted);margin-top:10px;line-height:1.5}
+
 /* ── PRINT ── */
 @media print{
   .sidebar,.controls,.btn,.no-print,#upload-screen{display:none!important}
@@ -178,10 +187,11 @@ tr:hover td{background:#f5f3ef}
     <div class="nav-section">Vistas</div>
     <button class="nav-btn active" onclick="showPanel('asignatura')">📚 Por asignatura</button>
     <button class="nav-btn" onclick="showPanel('estudiante')">👤 Por estudiante</button>
-    <button class="nav-btn" onclick="showPanel('progreso')">📈 Progreso del estudiante</button>
     <button class="nav-btn" onclick="showPanel('alertas')">⚠️ Resultados &lt; 4</button>
     <button class="nav-btn" onclick="showPanel('listado')">📋 Listado completo</button>
     <button class="nav-btn" onclick="showPanel('fichas')">🖨️ Fichas individuales</button>
+    <div class="nav-section">Profesores</div>
+    <button class="nav-btn" onclick="showPanel('puntajefinal')">✍️ Puntaje Final</button>
   </div>
 </nav>
 
@@ -218,22 +228,6 @@ tr:hover td{background:#f5f3ef}
     </div>
   </div>
   <div id="table-estudiante"></div>
-</div>
-
-<!-- PROGRESO DEL ESTUDIANTE -->
-<div id="panel-progreso" class="panel">
-  <div class="page-header">
-    <div>
-      <div class="page-title">Progreso del estudiante</div>
-      <div class="page-sub">Evolución de cada criterio, por asignatura — cada criterio se grafica por separado</div>
-    </div>
-    <div class="controls">
-      <select id="sel-student-prog" onchange="renderProgreso()"></select>
-      <button class="btn no-print" onclick="printProgreso(false)">🖨️ Imprimir este</button>
-      <button class="btn btn-primary no-print" id="btn-prog-todos" onclick="printProgreso(true)">🖨️ Imprimir todos</button>
-    </div>
-  </div>
-  <div id="progreso-container"></div>
 </div>
 
 <!-- ALERTAS -->
@@ -282,6 +276,21 @@ tr:hover td{background:#f5f3ef}
     </div>
   </div>
   <div id="fichas-container"></div>
+</div>
+
+<!-- PUNTAJE FINAL (profesores) -->
+<div id="panel-puntajefinal" class="panel">
+  <div class="page-header">
+    <div>
+      <div class="page-title">Puntaje Final por Criterio</div>
+      <div class="page-sub">El profesor determina el puntaje que mejor representa el desempeño anual — no es un promedio</div>
+    </div>
+    <div class="controls">
+      <button class="btn no-print" onclick="document.getElementById('pf-import-input').click()">📥 Importar puntajes</button>
+      <input type="file" id="pf-import-input" accept=".json" style="display:none" onchange="handleImportScores(this.files[0]);this.value=''">
+    </div>
+  </div>
+  <div id="pf-body"></div>
 </div>
 
 </main>
@@ -412,8 +421,7 @@ function parseFormatA(raw,filename){
     const comp=row[1]!=null?String(row[1]).trim():'';
     if(areaVal&&areaVal!=='nan') currentArea=areaVal;
     if(!comp||comp==='nan'||/MYP Assessment/i.test(comp)) continue;
-    // Fila de evaluación = "Evaluación N". Un criterio como "D. Evaluación" NO es evaluación.
-    if(!/^evaluaci[oó]n\s*\d+/i.test(comp)){currentCriteria=comp;continue}
+    if(!/evaluaci[oó]n/i.test(comp)){currentCriteria=comp;continue}
     const values={};
     for(let si=0;si<students.length;si++){
       const v=row[2+si];
@@ -556,10 +564,6 @@ function initSelects(){
   sf.innerHTML='<option value="todos">Todos los estudiantes</option>';
   DATA.students.forEach(s=>{const o=document.createElement('option');o.value=s;o.textContent=s;sf.appendChild(o)});
 
-  const sp=document.getElementById('sel-student-prog');
-  sp.innerHTML='';
-  DATA.students.forEach(s=>{const o=document.createElement('option');o.value=s;o.textContent=s;sp.appendChild(o)});
-
   const fal=document.getElementById('filter-area-listado');
   fal.innerHTML='<option value="">Todas las asignaturas</option>';
   areas.forEach(a=>{const o=document.createElement('option');o.value=a;o.textContent=a;fal.appendChild(o)});
@@ -605,10 +609,10 @@ function showPanel(name){
   event.target.classList.add('active');
   if(name==='asignatura') renderAsignatura();
   if(name==='estudiante') renderEstudiante();
-  if(name==='progreso') renderProgreso();
   if(name==='alertas') renderAlertas();
   if(name==='listado') renderListado();
   if(name==='fichas') renderFichas();
+  if(name==='puntajefinal') renderPuntajeFinal();
 }
 
 // ════════════════════════════
@@ -698,6 +702,311 @@ const MYP_ORDER = [
 ];
 // Always shown even if not in Excel
 const GUARANTEED_AREAS = ['Educación Física'];
+
+// ════════════════════════════════════════════════════════════
+//  PUNTAJE FINAL POR CRITERIO (profesores)
+//  El profesor ingresa el puntaje final (0–8) por criterio que
+//  MEJOR representa el desempeño del estudiante — no es un
+//  promedio de las evaluaciones del año. La app suma los 4
+//  criterios y convierte el total a una nota final 1–7 usando
+//  la tabla oficial IB de límites de calificación.
+// ════════════════════════════════════════════════════════════
+
+// Tabla oficial IB: suma total (4 criterios × 0-8 = máx. 32) → nota final 1-7
+const GRADE_BOUNDARIES=[
+  {min:1,max:5,grade:1},{min:6,max:9,grade:2},{min:10,max:14,grade:3},
+  {min:15,max:18,grade:4},{min:19,max:23,grade:5},{min:24,max:27,grade:6},{min:28,max:32,grade:7}
+];
+function sumToGrade(sum){
+  if(sum==null) return null;
+  for(const b of GRADE_BOUNDARIES) if(sum>=b.min&&sum<=b.max) return b.grade;
+  return sum>32?7:(sum<1?null:null);
+}
+
+// Una clave de acceso por asignatura (4 primeras letras + año).
+// Cámbialas aquí cuando quieras.
+const SUBJECT_CONFIG=[
+  {key:'lengua',     match:['lengua'],                         label:'Lengua y Literatura',             password:'leng2026', desc:'lengua'},
+  {key:'ingles',     match:['inglés','ingles'],                 label:'Inglés (Language Acquisition)',   password:'ingl2026', desc:'general'},
+  {key:'matematica', match:['matemát','matemat'],                label:'Matemática',                      password:'mate2026', desc:'matematica'},
+  {key:'individuos', match:['individuos'],                      label:'Individuos y Sociedades',         password:'indi2026', desc:'individuos'},
+  {key:'ciencias',   match:['ciencias'],                        label:'Ciencias',                         password:'cien2026', desc:'ciencias'},
+  {key:'artes',      match:['artes'],                           label:'Artes',                            password:'arte2026', desc:'artes'},
+  {key:'musica',     match:['música','musica'],                 label:'Música',                           password:'musi2026', desc:'artes'},
+  {key:'diseno',     match:['diseño','diseno'],                 label:'Diseño',                           password:'dise2026', desc:'diseno'},
+  {key:'edfisica',   match:['educación fís','educación fí','educacion fis','física','fisica'], label:'Educación Física', password:'educ2026', desc:'edfisica'},
+];
+function matchSubjectConfig(area){
+  const low=(area||'').toLowerCase();
+  return SUBJECT_CONFIG.find(c=>c.match.some(m=>low.includes(m)))||null;
+}
+
+// Descriptores cualitativos oficiales IB (Calificación → Descriptor) por asignatura.
+// 'general' se usa como respaldo para asignaturas sin tabla específica cargada aún (ej. Inglés).
+const DESCRIPTORS={
+  lengua:{
+    7:'El alumno produce trabajos de elevada calidad que, con frecuencia, son perspicaces, imaginativos y demuestran sensibilidad. Comunica una comprensión exhaustiva y profunda de los conceptos y contextos lingüísticos y literarios mediante el uso eficaz del lenguaje. Demuestra en todo momento un pensamiento crítico y creativo sofisticado mediante el análisis y la creación en el ámbito de la lengua y la literatura. Con frecuencia transfiere conocimientos y aplica habilidades con independencia y destreza en diversas situaciones complejas, tanto en el aula como en el mundo real.',
+    6:'El alumno produce trabajos de elevada calidad que, a veces, son perspicaces, imaginativos y demuestran sensibilidad. Comunica una comprensión amplia de los conceptos y contextos lingüísticos y literarios mediante el uso eficaz del lenguaje. Demuestra un pensamiento crítico y creativo, frecuentemente con sofisticación, mediante el análisis y la creación en el ámbito de la lengua y la literatura. Transfiere conocimientos y aplica habilidades, a menudo con independencia y exactitud, en diversas situaciones conocidas y desconocidas, tanto en el aula como en el mundo real.',
+    5:'El alumno produce trabajos que generalmente son de elevada calidad. Comunica una buena comprensión de los conceptos y contextos lingüísticos y literarios mediante el uso eficaz del lenguaje. Demuestra un pensamiento crítico y creativo, a veces con sofisticación, mediante el análisis y la creación en el ámbito de la lengua y la literatura. Con frecuencia transfiere conocimientos y aplica habilidades con cierta independencia y exactitud en situaciones complejas, tanto en el aula como el mundo real.',
+    4:'El alumno produce trabajos de buena calidad. Comunica una comprensión básica de la mayoría de los conceptos y contextos lingüísticos y literarios, con pocos errores de comprensión y carencias de comprensión menores en el uso del lenguaje. A menudo demuestra un pensamiento crítico y creativo mediante el análisis y la creación en el ámbito de la lengua y la literatura. Transfiere ciertos conocimientos y aplica algunas habilidades en situaciones conocidas en el aula, pero necesita apoyo en las situaciones desconocidas.',
+    3:'El alumno produce trabajos de una calidad aceptable. Comunica una comprensión básica de muchos conceptos y contextos lingüísticos y literarios, con algunas carencias o errores de comprensión importantes en el uso del lenguaje. Comienza a demostrar en cierta medida un pensamiento crítico y creativo mediante el análisis y la creación en el ámbito de la lengua y la literatura. Comienza a transferir conocimientos y a aplicar habilidades, y necesita apoyo incluso en situaciones conocidas.',
+    2:'El alumno produce trabajos de escasa calidad. Comunica una comprensión limitada de algunos conceptos y contextos lingüísticos y literarios, con importantes carencias en la comprensión y en el uso del lenguaje. Demuestra pocos indicios de un pensamiento crítico y creativo mediante el análisis y la creación en el ámbito de la lengua y la literatura. Hay pocos indicios de transferencia de conocimientos y de aplicación de habilidades.',
+    1:'El alumno produce trabajos de muy escasa calidad. Transmite muchos errores de comprensión importantes o no comprende la mayoría de los conceptos y contextos lingüísticos y literarios. Muy pocas veces demuestra indicios de pensamiento crítico o creativo mediante el análisis o la creación en el ámbito de la lengua y la literatura. Es muy inflexible, pocas veces muestra indicios de conocimientos o habilidades.'
+  },
+  individuos:{
+    7:'El alumno produce trabajos de elevada calidad que con frecuencia son perspicaces. Comunica una comprensión exhaustiva y profunda de los conceptos, contextos y términos de Individuos y Sociedades. Demuestra en todo momento un pensamiento crítico y creativo sofisticado para sintetizar y evaluar información, y para elaborar argumentos válidos y bien fundamentados. Con frecuencia transfiere conocimientos y aplica habilidades con independencia y destreza en diversas situaciones complejas, tanto en el aula como en el mundo real.',
+    6:'El alumno produce trabajos de elevada calidad que a veces son perspicaces. Comunica una comprensión amplia de los conceptos, contextos y términos de Individuos y Sociedades. Demuestra un pensamiento crítico y creativo, frecuentemente con sofisticación, para sintetizar y evaluar información, y para elaborar argumentos válidos y bien fundamentados. Transfiere conocimientos y aplica habilidades, a menudo con independencia, en una variedad de situaciones conocidas y desconocidas, tanto en el aula como en el mundo real.',
+    5:'El alumno produce trabajos que generalmente son de elevada calidad. Comunica una buena comprensión de los conceptos, contextos y términos de Individuos y Sociedades. Demuestra un pensamiento crítico y creativo, a veces con sofisticación, para sintetizar y evaluar información, y para elaborar argumentos válidos y bien fundamentados. Generalmente transfiere conocimientos y aplica habilidades con cierta independencia en situaciones conocidas, tanto en el aula como en el mundo real.',
+    4:'El alumno produce trabajos de buena calidad. Comunica una comprensión básica de la mayoría de los conceptos, contextos y términos de Individuos y Sociedades, con pocos errores de comprensión y carencias de comprensión menores. A menudo demuestra un pensamiento crítico y creativo para sintetizar y evaluar información, y para elaborar argumentos válidos y bien fundamentados. Transfiere ciertos conocimientos y aplica algunas habilidades en situaciones conocidas en el aula, pero necesita apoyo en las situaciones desconocidas.',
+    3:'El alumno produce trabajos de una calidad aceptable. Comunica una comprensión básica de muchos conceptos, contextos y términos de Individuos y Sociedades, con pocos errores de comprensión y carencias de comprensión menores. Comienza a demostrar en cierta medida un pensamiento crítico y creativo para sintetizar y evaluar información, y para elaborar argumentos válidos y bien fundamentados. Comienza a transferir conocimientos y a aplicar habilidades, y necesita apoyo incluso en situaciones conocidas en el aula.',
+    2:'El alumno produce trabajos de escasa calidad. Comunica una comprensión limitada de algunos conceptos, contextos y términos de Individuos y Sociedades, con importantes carencias de comprensión. Demuestra pocos indicios de un pensamiento crítico o creativo. Hay pocos indicios de transferencia de conocimientos y de aplicación de habilidades.',
+    1:'El alumno produce trabajos de muy escasa calidad. Transmite muchos errores de comprensión importantes o no comprende la mayoría de los conceptos o contextos de Individuos y Sociedades. Muy pocas veces demuestra indicios de pensamiento crítico o creativo. Es muy inflexible, pocas veces muestra indicios de conocimientos o habilidades.'
+  },
+  ciencias:{
+    7:'El alumno produce trabajos de elevada calidad, con frecuentes discusiones científicas perspicaces y plenamente justificadas. Comunica una comprensión exhaustiva y profunda de los conceptos y contextos, y demuestra un uso competente de los modos de comunicación científica y técnica. Demuestra en todo momento un pensamiento analítico y una evaluación crítica sofisticados para hacer valoraciones fundamentadas científicamente. Con frecuencia transfiere conocimientos científicos y aplica habilidades científicas con independencia y destreza en situaciones complejas, tanto en el aula como en el mundo real.',
+    6:'El alumno produce trabajos de elevada calidad, con algunas discusiones y justificaciones científicas perspicaces. Comunica una comprensión amplia de los conceptos y contextos, y demuestra un uso competente de los modos de comunicación científica y técnica. Demuestra pensamiento analítico y evaluaciones críticas para hacer valoraciones fundamentadas científicamente, a menudo con sofisticación. Transfiere conocimientos científicos y aplica habilidades científicas, a menudo con independencia, en situaciones en el aula y el mundo real.',
+    5:'El alumno produce trabajos que generalmente son de elevada calidad, con discusiones y justificaciones científicas. Comunica una buena comprensión de los conceptos y contextos, y demuestra un uso competente de los modos de comunicación científica y técnica. Demuestra pensamiento analítico y evaluaciones críticas para hacer valoraciones fundamentadas científicamente, a veces con sofisticación. Generalmente transfiere conocimientos científicos y aplica habilidades científicas con cierta independencia, tanto en situaciones en el aula como en el mundo real.',
+    4:'El alumno produce trabajos de buena calidad en los que hay algunos indicios de discusiones y justificaciones científicas. Comunica una comprensión básica de la mayoría de los conceptos y contextos, y da muestras de un uso adecuado de los modos de comunicación científica y técnica, con pocos errores de comprensión y carencias de comprensión menores. A menudo demuestra pensamiento analítico para hacer valoraciones fundamentadas científicamente. Transfiere algunos conocimientos científicos y aplica ciertas habilidades científicas en situaciones en el aula y el mundo real, pero necesita apoyo en las situaciones desconocidas.',
+    3:'El alumno produce trabajos de una calidad aceptable, en los que hay algunos indicios de descripciones científicas. Comunica una comprensión básica de muchos conceptos y contextos, con algunas carencias o errores de comprensión importantes. Comienza a demostrar en cierta medida un pensamiento analítico y a hacer valoraciones fundamentadas científicamente. Comienza a transferir conocimientos científicos y a aplicar habilidades, y necesita apoyo incluso en situaciones conocidas en el aula.',
+    2:'El alumno produce trabajos de escasa calidad. Comunica una comprensión limitada y con importantes carencias de algunos conceptos y contextos. Demuestra pocos indicios de pensamiento científico. Hay pocos indicios de transferencia de conocimientos científicos y de aplicación de habilidades.',
+    1:'El alumno produce trabajos de muy escasa calidad. Transmite muchos errores de comprensión importantes o no comprende la mayoría de los conceptos y contextos. Muy pocas veces demuestra indicios de pensamiento científico. Es muy inflexible, pocas veces muestra indicios de conocimientos o habilidades.'
+  },
+  matematica:{
+    7:'El alumno produce trabajos de elevada calidad en los que las matemáticas suelen emplearse con perspicacia. Comunica una comprensión exhaustiva y profunda de los conceptos y contextos, y demuestra una aplicación competente de las técnicas y los términos matemáticos. Demuestra en todo momento un pensamiento analítico y procesos lógicos sofisticados a la hora de resolver problemas y realizar investigaciones. Con frecuencia transfiere conocimientos matemáticos y aplica habilidades con independencia y destreza en diversas situaciones complejas, tanto en el aula como en el mundo real.',
+    6:'El alumno produce trabajos matemáticos de elevada calidad que a veces son perspicaces. Comunica una comprensión amplia de los conceptos y contextos, y demuestra una aplicación competente de las técnicas y los términos matemáticos. Demuestra un pensamiento analítico y procesos lógicos, frecuentemente con sofisticación, a la hora de resolver problemas y realizar investigaciones. Transfiere conocimientos matemáticos y aplica habilidades, a menudo con independencia, en diversas situaciones conocidas y desconocidas, tanto en el aula como en el mundo real.',
+    5:'El alumno produce trabajos matemáticos que generalmente son de elevada calidad. Comunica una buena comprensión de los conceptos y contextos, y demuestra una aplicación competente de las técnicas y los términos matemáticos. Demuestra un pensamiento analítico y procesos lógicos, a veces con sofisticación, a la hora de resolver problemas y realizar investigaciones. Generalmente transfiere conocimientos matemáticos y aplica habilidades con cierta independencia en situaciones conocidas, tanto en el aula como en el mundo real.',
+    4:'El alumno produce trabajos matemáticos de buena calidad. Comunica una comprensión básica de la mayoría de los conceptos y contextos, y da muestras de una aplicación adecuada de las técnicas y los términos matemáticos, con pocos errores de comprensión y carencias de comprensión menores. A menudo demuestra un pensamiento analítico a la hora de resolver problemas y realizar investigaciones. Transfiere algunos conocimientos matemáticos y aplica habilidades en situaciones conocidas en el aula, pero necesita apoyo en las situaciones desconocidas.',
+    3:'El alumno produce trabajos matemáticos de una calidad aceptable. Comunica una comprensión básica de muchos conceptos y contextos, y a veces da muestras de una aplicación adecuada de las técnicas y los términos matemáticos, con algunas carencias o errores de comprensión importantes. Comienza a demostrar en cierta medida un pensamiento analítico a la hora de resolver problemas y realizar investigaciones. Comienza a transferir conocimientos matemáticos y a aplicar habilidades, y necesita apoyo incluso en situaciones conocidas en el aula.',
+    2:'El alumno produce trabajos matemáticos de escasa calidad. Comunica una comprensión limitada de algunos conceptos y contextos. Demuestra pocos indicios de un pensamiento matemático. Hay pocos indicios de transferencia de conocimientos matemáticos y de aplicación de habilidades.',
+    1:'El alumno produce trabajos de muy escasa calidad. Transmite muchos errores de comprensión importantes o no comprende la mayoría de los conceptos y contextos. Muy pocas veces demuestra indicios de pensamiento matemático. Es muy inflexible, pocas veces muestra indicios de conocimientos o habilidades.'
+  },
+  artes:{
+    7:'El alumno produce con frecuencia intenciones artísticas innovadoras e imaginativas que dan lugar a respuestas artísticas de elevada calidad. Comunica una comprensión integral y profunda de la forma artística estudiada, lo que incluye sus conceptos, procesos y contextos. Demuestra en todo momento comportamientos que reflejan un pensamiento crítico y una exploración de ideas sofisticados mediante la creación y la crítica del trabajo artístico propio y el de los demás. Con frecuencia transfiere conocimientos y aplica habilidades y técnicas con independencia y destreza para crear obras en situaciones nuevas.',
+    6:'El alumno produce a veces intenciones artísticas innovadoras e imaginativas que dan lugar a respuestas artísticas de elevada calidad. Comunica una comprensión amplia de la forma artística estudiada, lo que incluye sus conceptos, procesos y contextos. Demuestra comportamientos que reflejan un pensamiento crítico y una exploración de ideas perspicaces, frecuentemente con sofisticación, mediante la creación y la crítica del trabajo artístico propio y el de los demás. Transfiere conocimientos y aplica habilidades y técnicas, a menudo con independencia, para crear obras en situaciones nuevas.',
+    5:'El alumno produce intenciones artísticas que generalmente dan lugar a respuestas artísticas de elevada calidad. Comunica una buena comprensión de la forma artística estudiada, lo que incluye sus conceptos, procesos y contextos. Demuestra comportamientos que reflejan un pensamiento crítico y una exploración de ideas, a veces con sofisticación, mediante la creación y la crítica del trabajo artístico propio y el de los demás. Generalmente transfiere conocimientos y aplica habilidades y técnicas con cierta independencia para crear obras en situaciones nuevas.',
+    4:'El alumno produce intenciones artísticas que a menudo dan lugar a respuestas artísticas de buena calidad. Comunica una comprensión básica de la forma artística estudiada, lo que incluye sus conceptos, procesos y contextos. Demuestra algunos comportamientos que reflejan un pensamiento crítico y cierta exploración de ideas mediante la creación y la crítica del trabajo artístico propio y el de los demás. Transfiere algunos conocimientos y aplica algunas habilidades y técnicas con apoyo para crear obras en situaciones nuevas.',
+    3:'El alumno produce intenciones artísticas que a menudo dan lugar a respuestas artísticas de calidad aceptable. Comunica una comprensión básica de la forma artística estudiada, lo que incluye algunos conceptos, procesos y contextos. Comienza a demostrar algunos comportamientos que reflejan un pensamiento crítico y cierta exploración de ideas mediante la creación y la crítica del trabajo artístico propio y el de los demás. Comienza a transferir conocimientos y a aplicar habilidades y técnicas, y necesita apoyo incluso en situaciones conocidas.',
+    2:'El alumno produce trabajos de escasa calidad. Comunica una comprensión limitada de la forma artística estudiada, lo que incluye algunos conceptos, procesos y contextos. Demuestra pocos indicios de comportamientos que reflejan un pensamiento crítico o de exploración de ideas. Hay pocos indicios de transferencia de conocimientos o de aplicación de habilidades o técnicas.',
+    1:'El alumno produce trabajos de muy escasa calidad. Transmite muchos errores de comprensión importantes o no comprende la mayoría de los conceptos y contextos. Muy pocas veces demuestra comportamientos que reflejan un pensamiento crítico o exploración de ideas. Es muy inflexible, pocas veces muestra indicios de conocimientos o habilidades.'
+  },
+  diseno:{
+    7:'El alumno produce soluciones de diseño de elevada calidad, que con frecuencia son innovadoras, mediante la aplicación del ciclo de diseño. Comunica una comprensión exhaustiva y profunda de los conceptos y contextos del diseño mediante un trabajo independiente y detallado. Demuestra en todo momento un pensamiento crítico y creativo sofisticado para fundamentar los métodos de investigación y para perfeccionar las soluciones seleccionadas. Con frecuencia transfiere conocimientos y aplica habilidades con independencia y destreza a problemas complejos del mundo real.',
+    6:'El alumno produce soluciones de diseño de elevada calidad, que a veces son innovadoras, mediante la aplicación del ciclo de diseño. Comunica una comprensión amplia de los conceptos y contextos del diseño mediante un trabajo independiente y detallado. Demuestra un pensamiento crítico y creativo para fundamentar los métodos de investigación y para perfeccionar las soluciones seleccionadas, frecuentemente con sofisticación. Transfiere conocimientos y aplica habilidades, a menudo con independencia, a problemas del mundo real.',
+    5:'El alumno produce soluciones de diseño que generalmente son de elevada calidad mediante la aplicación del ciclo de diseño. Comunica una buena comprensión de los conceptos y contextos del diseño. Demuestra un pensamiento crítico y creativo para fundamentar los métodos de investigación y para perfeccionar las soluciones seleccionadas, a veces con sofisticación. Generalmente transfiere conocimientos y aplica habilidades con cierta independencia a problemas del mundo real.',
+    4:'El alumno produce soluciones de diseño de buena calidad mediante la aplicación del ciclo de diseño. Comunica una comprensión básica de los conceptos y contextos del diseño, con pocos errores de comprensión y carencias de comprensión menores. A menudo demuestra un pensamiento crítico y creativo para fundamentar los métodos de investigación y para perfeccionar las soluciones seleccionadas. Transfiere algunos conocimientos y aplica algunas habilidades en situaciones conocidas, pero necesita apoyo en las situaciones desconocidas.',
+    3:'El alumno produce soluciones de diseño de aceptable calidad que generalmente siguen el ciclo de diseño. Comunica una comprensión básica de los conceptos y contextos del diseño en su trabajo, con algunas carencias o errores de comprensión importantes. Comienza a demostrar en cierta medida un pensamiento crítico y creativo para fundamentar los métodos de investigación y para perfeccionar las soluciones seleccionadas. Comienza a transferir conocimientos y a aplicar habilidades, y necesita apoyo incluso en situaciones conocidas.',
+    2:'El alumno produce trabajos de escasa calidad. Comunica una comprensión limitada de algunos conceptos y contextos del diseño. Demuestra pocos indicios de un pensamiento crítico o creativo. Hay pocos indicios de transferencia de conocimientos o de aplicación de habilidades.',
+    1:'El alumno produce trabajos de muy escasa calidad. Transmite muchos errores de comprensión importantes o no comprende la mayoría de los conceptos y contextos del diseño. Muy pocas veces demuestra un pensamiento crítico o creativo. Es muy inflexible, pocas veces muestra indicios de conocimientos o habilidades.'
+  },
+  edfisica:{
+    7:'El alumno produce soluciones para mejorar el rendimiento físico y la salud de elevada calidad, que con frecuencia son innovadoras, mediante la aplicación de estrategias relacionadas con la actividad física y la salud. Comunica una comprensión exhaustiva y profunda de los conceptos y contextos relacionados con la actividad física y la salud mediante un trabajo independiente y detallado. Demuestra en todo momento un pensamiento analítico y una evaluación crítica sofisticados para mejorar las habilidades y técnicas en Educación Física y para la Salud. Con frecuencia transfiere conocimientos y aplica habilidades con independencia y destreza en situaciones complejas del mundo real.',
+    6:'El alumno produce soluciones para mejorar el rendimiento físico y la salud de elevada calidad, que a veces son innovadoras, mediante la aplicación de estrategias relacionadas con la actividad física y la salud. Comunica una comprensión amplia de los conceptos y contextos relacionados con la actividad física y la salud mediante un trabajo independiente y detallado. Demuestra un pensamiento analítico y evaluaciones críticas, frecuentemente con sofisticación, para mejorar las habilidades y técnicas en Educación Física y para la Salud. Transfiere conocimientos y aplica habilidades, a menudo con independencia, en situaciones del mundo real.',
+    5:'El alumno produce soluciones para mejorar el rendimiento físico y la salud que generalmente son de elevada calidad mediante la aplicación de estrategias relacionadas con la actividad física y la salud. Comunica una buena comprensión de los conceptos y contextos relacionados con la actividad física y la salud. Demuestra un pensamiento analítico y evaluaciones críticas, a veces con sofisticación, para mejorar las habilidades y técnicas en Educación Física y para la Salud. Generalmente transfiere conocimientos y aplica habilidades con cierta independencia en situaciones del mundo real.',
+    4:'El alumno produce soluciones para mejorar el rendimiento físico y la salud de buena calidad mediante la aplicación de estrategias relacionadas con la actividad física y la salud. Comunica una comprensión básica de los conocimientos fácticos, procedimentales y conceptuales de Educación Física y para la Salud, con pocos errores de comprensión y carencias de comprensión menores. A menudo demuestra un pensamiento analítico y evaluaciones críticas para mejorar las habilidades y técnicas en Educación Física y para la Salud. Transfiere algunos conocimientos y aplica algunas habilidades en situaciones conocidas, pero necesita apoyo en las situaciones desconocidas.',
+    3:'El alumno produce soluciones para mejorar el rendimiento físico y la salud de una calidad aceptable mediante la aplicación de estrategias relacionadas con la actividad física y la salud. Comunica una comprensión básica de los conocimientos fácticos, procedimentales y conceptuales de Educación Física y para la Salud, con algunas carencias o errores de comprensión importantes. Comienza a demostrar en cierta medida un pensamiento analítico y una evaluación crítica en relación con las habilidades y técnicas en Educación Física y para la Salud. Comienza a transferir conocimientos y a aplicar habilidades, y necesita apoyo incluso en situaciones conocidas.',
+    2:'El alumno produce trabajos de escasa calidad. Comunica una comprensión limitada de algunos conocimientos fácticos, procedimentales y conceptuales de Educación Física y para la Salud. Demuestra pocos indicios de un pensamiento analítico o una evaluación crítica en relación con las habilidades y técnicas en Educación Física y para la Salud. Hay pocos indicios de transferencia de conocimientos o de aplicación de habilidades.',
+    1:'El alumno produce trabajos de muy escasa calidad. Transmite muchos errores de comprensión importantes o no comprende la mayoría de los conocimientos fácticos, procedimentales y conceptuales. Muy pocas veces demuestra un pensamiento crítico o analítico. Es muy inflexible, pocas veces muestra indicios de conocimientos o habilidades.'
+  },
+  // Descriptor genérico IB (calificaciones_finales.pdf) — respaldo para asignaturas sin
+  // tabla específica cargada aún (actualmente: Inglés / Language Acquisition).
+  general:{
+    7:'El alumno produce trabajos de elevada calidad, y con frecuencia innovadores. Comunica una comprensión exhaustiva y profunda de los conceptos y contextos. Demuestra en todo momento un pensamiento crítico y creativo sofisticado. Con frecuencia transfiere conocimientos y habilidades con independencia y destreza en diversas situaciones complejas en el aula y el mundo real.',
+    6:'El alumno produce trabajos de elevada calidad, y a veces innovadores. Comunica una comprensión amplia de los conceptos y contextos. Demuestra un pensamiento crítico y creativo, frecuentemente con sofisticación. Utiliza conocimientos y habilidades en situaciones conocidas y desconocidas en el aula y el mundo real, a menudo con independencia.',
+    5:'El alumno produce trabajos que generalmente son de elevada calidad. Comunica una comprensión sólida de los conceptos y contextos. Demuestra un pensamiento crítico y creativo, a veces con sofisticación. Utiliza conocimientos y habilidades en situaciones conocidas en el aula y el mundo real y, con apoyo, en algunas situaciones desconocidas en el mundo real.',
+    4:'El alumno produce trabajos de buena calidad. Comunica una comprensión básica de la mayoría de los conceptos y contextos, con pocos errores de comprensión y carencias de comprensión menores. A menudo demuestra un pensamiento crítico y creativo básico. Utiliza conocimientos y habilidades con cierta flexibilidad en situaciones conocidas en el aula, pero necesita apoyo en las situaciones desconocidas.',
+    3:'El alumno produce trabajos de una calidad aceptable. Comunica una comprensión básica de muchos conceptos y contextos, con algunas carencias o errores de comprensión importantes. Comienza a demostrar en cierta medida un pensamiento crítico y creativo básico. A menudo es inflexible en el uso de conocimientos y habilidades, y necesita apoyo incluso en situaciones conocidas en el aula.',
+    2:'El alumno produce trabajos de escasa calidad. Expresa errores de comprensión o presenta importantes carencias en la comprensión de muchos conceptos y contextos. Pocas veces demuestra un pensamiento crítico o creativo. Generalmente es inflexible en el uso de conocimientos y habilidades, que aplica con poca frecuencia.',
+    1:'El alumno produce trabajos de muy escasa calidad. Transmite muchos errores de comprensión importantes o no comprende la mayoría de los conceptos y contextos. Muy pocas veces demuestra un pensamiento crítico o creativo. Es muy inflexible, pocas veces utiliza conocimientos o habilidades.'
+  }
+};
+
+// ── Almacenamiento de puntajes finales (solo en este navegador) ──
+// FINAL_SCORES[subjectKey][criterio][estudiante] = puntaje (0-8)
+function loadFinalScores(){
+  try{
+    const raw=localStorage.getItem('visorMYP_finalScores_v1');
+    return raw?JSON.parse(raw):{};
+  }catch(e){return {}}
+}
+function saveFinalScores(){
+  try{ localStorage.setItem('visorMYP_finalScores_v1', JSON.stringify(FINAL_SCORES)); }catch(e){}
+}
+let FINAL_SCORES = loadFinalScores();
+let pfCurrent = null; // {key, area, cfg} de la asignatura actualmente desbloqueada en este panel
+
+function cssSafe(s){return String(s).replace(/[^a-zA-Z0-9]/g,'_')}
+
+function computeSum(key,criteria,st){
+  let sum=0,count=0;
+  criteria.forEach(c=>{
+    const v=FINAL_SCORES[key]&&FINAL_SCORES[key][c]?FINAL_SCORES[key][c][st]:null;
+    if(v!=null&&v!==''){sum+=Number(v);count++}
+  });
+  return count===criteria.length?sum:null;
+}
+function getDescriptorText(descKey,sum){
+  if(sum==null) return '';
+  const g=sumToGrade(sum);
+  if(g==null) return '';
+  const table=DESCRIPTORS[descKey]||DESCRIPTORS.general;
+  return (table&&table[g])||'';
+}
+
+function getSubjectsInData(){
+  if(!DATA) return [];
+  const areas=[...new Set(DATA.records.map(r=>r.area))];
+  const list=[];
+  areas.forEach(a=>{
+    const cfg=matchSubjectConfig(a);
+    if(cfg && !list.find(x=>x.cfg.key===cfg.key)) list.push({area:a,cfg});
+  });
+  return list;
+}
+
+function renderPuntajeFinal(){
+  if(!DATA) return;
+  if(pfCurrent){ renderPFTable(); return; }
+  const body=document.getElementById('pf-body');
+  const subjects=getSubjectsInData();
+  if(!subjects.length){
+    body.innerHTML='<p style="color:var(--muted);padding:20px">No se detectaron asignaturas reconocidas en los datos cargados.</p>';
+    return;
+  }
+  body.innerHTML=`
+    <div class="pf-login-card">
+      <label>Tu asignatura</label>
+      <select id="pf-subject-select">
+        ${subjects.map(s=>`<option value="${s.cfg.key}" data-area="${s.area.replace(/"/g,'&quot;')}">${s.cfg.label} (${s.area})</option>`).join('')}
+      </select>
+      <label>Clave de la asignatura</label>
+      <input type="password" id="pf-password" placeholder="Clave" onkeydown="if(event.key==='Enter')tryUnlockSubject()">
+      <button class="btn btn-primary" style="width:100%" onclick="tryUnlockSubject()">Ingresar</button>
+      <div id="pf-login-error" style="display:none;color:var(--danger);font-size:12px;margin-top:10px"></div>
+    </div>`;
+}
+
+function tryUnlockSubject(){
+  const sel=document.getElementById('pf-subject-select');
+  const opt=sel.selectedOptions[0];
+  const key=sel.value;
+  const area=opt.dataset.area;
+  const cfg=SUBJECT_CONFIG.find(c=>c.key===key);
+  const pass=document.getElementById('pf-password').value;
+  if(!cfg||pass!==cfg.password){
+    const err=document.getElementById('pf-login-error');
+    err.style.display='block'; err.textContent='Clave incorrecta.';
+    return;
+  }
+  pfCurrent={key,area,cfg};
+  renderPFTable();
+}
+
+function lockSubject(){
+  pfCurrent=null;
+  renderPuntajeFinal();
+}
+
+function renderPFTable(){
+  const {key,area,cfg}=pfCurrent;
+  const criteria=getFullCriteria(area);
+  if(!FINAL_SCORES[key]) FINAL_SCORES[key]={};
+  criteria.forEach(c=>{ if(!FINAL_SCORES[key][c]) FINAL_SCORES[key][c]={}; });
+
+  const body=document.getElementById('pf-body');
+  let html=`
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+      <div style="font-size:13px"><strong>${cfg.label}</strong> <span style="color:var(--muted)">· ${area}</span></div>
+      <div class="controls">
+        <button class="btn no-print" onclick="exportPFScores()">⬇️ Descargar mis puntajes</button>
+        <button class="btn no-print" onclick="lockSubject()">🔒 Cambiar asignatura</button>
+      </div>
+    </div>
+    <div class="table-wrap"><table class="pf-table"><thead><tr>
+      <th>Estudiante</th>
+      ${criteria.map(c=>`<th style="text-align:center">${c}</th>`).join('')}
+      <th style="text-align:center">Suma</th>
+      <th style="text-align:center">Nota Final</th>
+      <th>Descripción cualitativa</th>
+    </tr></thead><tbody>`;
+
+  DATA.students.forEach(st=>{
+    const sum=computeSum(key,criteria,st);
+    const grade=sum!=null?sumToGrade(sum):null;
+    html+=`<tr>
+      <td class="bold">${st}</td>
+      ${criteria.map(c=>{
+        const v=FINAL_SCORES[key][c][st];
+        return `<td style="text-align:center"><input type="number" class="pf-score-input" min="0" max="8" step="1"
+          value="${v??''}" data-st="${st.replace(/"/g,'&quot;')}" data-crit="${c.replace(/"/g,'&quot;')}"
+          oninput="updatePFScore('${key}',this.dataset.crit,this.dataset.st,this.value)"></td>`;
+      }).join('')}
+      <td class="num" id="pf-sum-${cssSafe(st)}">${sum??'—'}</td>
+      <td class="num" id="pf-grade-${cssSafe(st)}">${grade??'—'}</td>
+      <td class="pf-desc-cell" id="pf-desc-${cssSafe(st)}">${sum==null?'<span style="opacity:.5">Pendiente</span>':getDescriptorText(cfg.desc,sum)}</td>
+    </tr>`;
+  });
+  html+=`</tbody></table></div>
+  <p class="pf-hint">El puntaje por criterio (0–8) es el que, a tu juicio, mejor representa el desempeño global del estudiante en ese criterio durante el año — no un promedio de las evaluaciones registradas. Se guarda automáticamente en este navegador a medida que escribes. Cuando termines, usa "Descargar mis puntajes" y envía ese archivo al coordinador para consolidarlo en el informe final.</p>`;
+  body.innerHTML=html;
+}
+
+function updatePFScore(key,criteria,st,val){
+  if(!FINAL_SCORES[key]) FINAL_SCORES[key]={};
+  if(!FINAL_SCORES[key][criteria]) FINAL_SCORES[key][criteria]={};
+  if(val===''){
+    delete FINAL_SCORES[key][criteria][st];
+  }else{
+    let n=Number(val);
+    if(isNaN(n)) return;
+    if(n<0)n=0; if(n>8)n=8;
+    FINAL_SCORES[key][criteria][st]=n;
+  }
+  saveFinalScores();
+  if(!pfCurrent) return;
+  const criteriaList=getFullCriteria(pfCurrent.area);
+  const sum=computeSum(key,criteriaList,st);
+  const grade=sum!=null?sumToGrade(sum):null;
+  const sumCell=document.getElementById('pf-sum-'+cssSafe(st));
+  const gradeCell=document.getElementById('pf-grade-'+cssSafe(st));
+  const descCell=document.getElementById('pf-desc-'+cssSafe(st));
+  if(sumCell) sumCell.textContent = sum??'—';
+  if(gradeCell) gradeCell.textContent = grade??'—';
+  if(descCell) descCell.innerHTML = sum==null?'<span style="opacity:.5">Pendiente</span>':getDescriptorText(pfCurrent.cfg.desc,sum);
+}
+
+function exportPFScores(){
+  if(!pfCurrent) return;
+  const {key,area,cfg}=pfCurrent;
+  const payload={subjectKey:key,label:cfg.label,area,period:(DATA&&DATA.period)||'',exportedAt:new Date().toISOString(),scores:FINAL_SCORES[key]||{}};
+  const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url; a.download=`puntajefinal_${key}_${(area||'').replace(/[^a-zA-Z0-9]/g,'_')}.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function handleImportScores(file){
+  if(!file) return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      const payload=JSON.parse(e.target.result);
+      if(!payload.subjectKey||!payload.scores) throw new Error('El archivo no tiene el formato esperado.');
+      if(!FINAL_SCORES[payload.subjectKey]) FINAL_SCORES[payload.subjectKey]={};
+      Object.entries(payload.scores).forEach(([crit,studMap])=>{
+        if(!FINAL_SCORES[payload.subjectKey][crit]) FINAL_SCORES[payload.subjectKey][crit]={};
+        Object.assign(FINAL_SCORES[payload.subjectKey][crit], studMap);
+      });
+      saveFinalScores();
+      alert('Puntajes de "'+(payload.label||payload.subjectKey)+'" importados correctamente.');
+      if(pfCurrent && pfCurrent.key===payload.subjectKey) renderPFTable();
+    }catch(err){
+      alert('Error al importar el archivo: '+err.message);
+    }
+  };
+  reader.readAsText(file);
+}
 
 function buildReportCard(st,forPrint){
   const RED='#9b1c1c', BLACK='#1a1a1a', LGRAY='#f0f0f0', MGRAY='#d0d0d0', DGRAY='#444';
@@ -834,6 +1143,33 @@ function buildReportCard(st,forPrint){
   });
   html+=`</tbody></table>`;
 
+  // ── Puntaje Final y Descripción Cualitativa ──
+  const subjectsWithFinal=sortedAreas
+    .map(area=>({area,cfg:matchSubjectConfig(area)}))
+    .filter(x=>x.cfg);
+  if(subjectsWithFinal.length){
+    html+=`<div style="background:${BLACK};color:#fff;font-size:${fp?'9px':'13px'};font-weight:700;`+
+          `padding:${hdrPad};margin-bottom:0">Puntaje Final y Descripción Cualitativa</div>`;
+    html+=`<table style="width:100%;border-collapse:collapse;font-size:${fsS};`+
+          `margin-bottom:${fp?'5px':'10px'};border:1px solid ${MGRAY}"><tbody>`;
+    subjectsWithFinal.forEach(({area,cfg})=>{
+      const criteria=getFullCriteria(area);
+      const sum=computeSum(cfg.key,criteria,st);
+      const grade=sum!=null?sumToGrade(sum):null;
+      const descText=grade!=null?((DESCRIPTORS[cfg.desc]||DESCRIPTORS.general)[grade]||''):'';
+      html+=`<tr>
+        <td style="padding:${cellPad};border-bottom:1px solid ${MGRAY};font-weight:600;vertical-align:top;width:110px">${area}</td>
+        <td style="padding:${cellPad};border-bottom:1px solid ${MGRAY};vertical-align:top">
+          <div style="font-weight:700;margin-bottom:2px;color:${sum!=null?RED:'#aaa'}">
+            ${sum!=null?`Puntaje: ${sum}/32 &nbsp;→&nbsp; Nota Final: ${grade}`:'Pendiente de ingreso'}
+          </div>
+          ${descText?`<div style="color:${DGRAY};line-height:1.35">${descText}</div>`:''}
+        </td>
+      </tr>`;
+    });
+    html+=`</tbody></table>`;
+  }
+
   // ── Other subjects ──
   html+=`<div style="background:${BLACK};color:#fff;font-size:${fp?'9px':'13px'};font-weight:700;`+
         `padding:${hdrPad};margin-bottom:0">Otras Asignaturas</div>`;
@@ -921,191 +1257,6 @@ function openPrintWindow(students){
   <scr`+`ipt>window.onload=()=>{window.print();window.onafterprint=()=>window.close()}</scr`+`ipt>
   </body></html>`);
   win.document.close();
-}
-
-// ════════════════════════════
-//  VIEW: PROGRESO DEL ESTUDIANTE
-//  Un gráfico de líneas por criterio, agrupados por asignatura.
-//  Solo datos del propio estudiante (sin promedios ni comparaciones).
-// ════════════════════════════
-const PROG_COLORS={A:'#9b1c1c',B:'#1a1a1a',C:'#5a5a5a',D:'#c0504d'};
-
-function critLetter(c){const m=String(c).trim().match(/^([A-Za-z])\s*\./);return m?m[1].toUpperCase():''}
-function evalNum(e){const m=String(e).match(/\d+/);return m?+m[0]:0}
-
-// Asignaturas en orden MYP (misma lógica que el informe por estudiante)
-function getSortedAreasProg(){
-  const dataAreas=[...new Set(DATA.records.map(r=>r.area))];
-  const seen=new Set(), out=[];
-  MYP_ORDER.forEach(o=>{
-    const m=dataAreas.find(d=>d.toLowerCase().includes(o.toLowerCase())||o.toLowerCase().includes(d.toLowerCase()));
-    if(m&&!seen.has(m)){seen.add(m);out.push(m)}
-  });
-  dataAreas.forEach(a=>{if(!seen.has(a)){seen.add(a);out.push(a)}});
-  GUARANTEED_AREAS.forEach(g=>{
-    if(!out.some(a=>a.toLowerCase().includes(g.toLowerCase())||g.toLowerCase().includes(a.toLowerCase()))) out.push(g);
-  });
-  return out;
-}
-
-// Criterios de la asignatura: uno por letra (A–D). Si la planilla trae un nombre
-// distinto al estándar para la misma letra, se usa el de la planilla.
-function getCriteriaProg(area){
-  const key=Object.keys(MYP_CRITERIA).find(k=>area.toLowerCase().includes(k));
-  const standard=key?MYP_CRITERIA[key]:[];
-  const fromData=[...new Set(DATA.records.filter(r=>r.area===area).map(r=>r.criteria))];
-  const out=[];
-  standard.forEach(s=>{
-    const L=critLetter(s);
-    const d=fromData.find(c=>L&&critLetter(c)===L);
-    out.push(d||s);
-  });
-  fromData.forEach(c=>{if(!out.includes(c)) out.push(c)});
-  return out;
-}
-
-// Serie de un criterio para un estudiante: evaluaciones en orden (S1 → S2, E1 → En)
-function getSeriesProg(area,crit,st){
-  const both=DATA.hasSem1&&DATA.hasSem2;
-  const recs=DATA.records
-    .filter(r=>r.area===area&&r.criteria===crit)
-    .sort((a,b)=>(a.semester-b.semester)||(evalNum(a.eval)-evalNum(b.eval)));
-  const labels=recs.map(r=>(both?`S${r.semester} `:'')+abbrevEval(r.eval));
-  const values=recs.map(r=>r.values[st]??null);
-  return {labels,values,hasRecords:recs.length>0,hasValues:values.some(v=>v!=null)};
-}
-
-// Dibuja el gráfico en un canvas oculto y lo devuelve como imagen (sirve para pantalla e impresión)
-const progValueLabels={
-  id:'progValueLabels',
-  afterDatasetsDraw(chart){
-    const {ctx}=chart;
-    const meta=chart.getDatasetMeta(0);
-    const data=chart.data.datasets[0].data;
-    ctx.save();
-    ctx.font='bold 12px Arial';
-    ctx.fillStyle='#1a1a1a';
-    ctx.textAlign='center';
-    ctx.textBaseline='bottom';
-    meta.data.forEach((pt,i)=>{if(data[i]!=null) ctx.fillText(data[i],pt.x,pt.y-8)});
-    ctx.restore();
-  }
-};
-
-function chartImageProg(series,color,h){
-  const holder=document.getElementById('prog-chart-holder')||(()=>{
-    const d=document.createElement('div');d.id='prog-chart-holder';
-    d.style.cssText='position:fixed;left:-10000px;top:0;width:400px;height:200px;';
-    document.body.appendChild(d);return d;
-  })();
-  const canvas=document.createElement('canvas');
-  canvas.width=360;canvas.height=h||180;
-  holder.appendChild(canvas);
-  const chart=new Chart(canvas,{
-    type:'line',
-    data:{labels:series.labels,datasets:[{
-      data:series.values,borderColor:color,backgroundColor:color,
-      borderWidth:2.5,pointRadius:4.5,pointHoverRadius:4.5,tension:0,spanGaps:true,clip:false
-    }]},
-    options:{
-      responsive:false,animation:false,devicePixelRatio:2,
-      layout:{padding:{top:24,right:8,left:2,bottom:0}},
-      plugins:{legend:{display:false},tooltip:{enabled:false}},
-      scales:{
-        y:{min:0,max:8,ticks:{stepSize:2,font:{size:11},color:'#666'},grid:{color:'#ececec'},border:{display:false}},
-        x:{offset:true,ticks:{font:{size:11},color:'#444',maxRotation:0,autoSkip:false},grid:{display:false}}
-      }
-    },
-    plugins:[progValueLabels]
-  });
-  const url=chart.toBase64Image('image/png');
-  chart.destroy();
-  canvas.remove();
-  return url;
-}
-
-function buildProgressReport(st,fp){
-  const RED='#9b1c1c', BLACK='#1a1a1a', MGRAY='#d0d0d0', DGRAY='#444';
-  const fsS=fp?'8px':'11px', fsXS=fp?'7px':'10px';
-  let html=`<div style="font-family:${fp?'Arial':'IBM Plex Sans'},sans-serif;color:${BLACK};max-width:${fp?'100%':'980px'}">`;
-
-  // Encabezado Redland
-  html+=`<div style="text-align:center;padding:${fp?'4px 0 4px':'12px 0 8px'};border-bottom:3px solid ${RED};margin-bottom:${fp?'6px':'12px'}">
-    <div style="font-size:${fp?'18px':'26px'};font-weight:700;letter-spacing:-.5px">Redland School</div>
-    <div style="font-size:${fp?'11px':'14px'};font-weight:600;color:${RED};margin-top:1px">Informe MYP — Progreso por Criterio</div>
-    <div style="font-size:${fp?'8px':'11px'};color:${DGRAY};margin-top:2px">${DATA.period||''}</div>
-  </div>`;
-  html+=`<div style="display:flex;justify-content:space-between;align-items:center;border:1.5px solid ${BLACK};`+
-        `padding:${fp?'4px 8px':'7px 14px'};margin-bottom:${fp?'6px':'14px'}">
-    <span style="font-size:${fp?'10px':'14px'}"><strong>Nombre:</strong>&nbsp;&nbsp;${st}</span>
-    <span style="font-size:${fp?'9px':'12px'};color:${DGRAY};font-weight:600">${DATA.title||''}</span>
-  </div>`;
-
-  getSortedAreasProg().forEach(area=>{
-    const crits=getCriteriaProg(area);
-    const areaHasRecords=DATA.records.some(r=>r.area===area);
-    html+=`<div style="break-inside:avoid;page-break-inside:avoid;margin-bottom:${fp?'5px':'14px'}">`;
-    html+=`<div style="background:${RED};color:#fff;font-weight:600;padding:${fp?'2px 8px':'5px 12px'};font-size:${fp?'9px':'13px'}">${area}</div>`;
-    if(!areaHasRecords){
-      html+=`<div style="border:1px solid ${MGRAY};border-top:none;padding:${fp?'6px 8px':'12px'};font-size:${fsS};color:#999">Sin evaluaciones registradas en esta asignatura.</div></div>`;
-      return;
-    }
-    html+=`<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:${fp?'4px':'10px'};border:1px solid ${MGRAY};border-top:none;padding:${fp?'4px':'10px'}">`;
-    crits.forEach(crit=>{
-      const L=critLetter(crit);
-      const color=PROG_COLORS[L]||BLACK;
-      const s=getSeriesProg(area,crit,st);
-      html+=`<div style="min-width:0">
-        <div style="font-size:${fsXS};font-weight:700;color:${color};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px" title="${crit}">${crit}</div>`;
-      if(!s.hasRecords||!s.hasValues){
-        const msg=!s.hasRecords?'Sin evaluaciones registradas':'Sin notas para este estudiante';
-        html+=`<div style="aspect-ratio:${fp?'360/140':'2/1'};display:flex;align-items:center;justify-content:center;border:1px dashed ${MGRAY};font-size:${fsXS};color:#aaa;text-align:center;padding:4px">${msg}</div>`;
-      }else{
-        html+=`<img src="${chartImageProg(s,color,fp?140:180)}" style="width:100%;display:block" alt="${crit}">`;
-      }
-      html+=`</div>`;
-    });
-    html+=`</div></div>`;
-  });
-
-  html+=`</div>`;
-  return html;
-}
-
-function renderProgreso(){
-  if(!DATA) return;
-  const st=document.getElementById('sel-student-prog').value;
-  document.getElementById('progreso-container').innerHTML=
-    `<div style="background:var(--surface);border:1px solid var(--rule);border-radius:6px;padding:16px 20px">${buildProgressReport(st,false)}</div>`;
-}
-
-function printProgreso(all){
-  const students=all?DATA.students:[document.getElementById('sel-student-prog').value];
-  const btn=document.getElementById('btn-prog-todos');
-  const oldTxt=btn.textContent;
-  if(all){btn.textContent='Generando…';btn.disabled=true}
-  // Pequeña pausa para que el botón muestre "Generando…" antes del cálculo
-  setTimeout(()=>{
-    const body=students.map(st=>`<div class="block">${buildProgressReport(st,true)}</div>`).join('');
-    btn.textContent=oldTxt;btn.disabled=false;
-    const win=window.open('','_blank');
-    win.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
-    <title>Progreso MYP — Redland School</title>
-    <style>
-      *{box-sizing:border-box;margin:0;padding:0}
-      body{font-family:Arial,sans-serif;color:#1a1a1a;background:#fff;padding:10px 14px}
-      .block{page-break-after:always}
-      .block:last-child{page-break-after:avoid}
-      @media print{
-        @page{size:A4;margin:9mm 10mm}
-        body{padding:0}
-        *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
-      }
-    </style></head><body>${body}
-    <scr`+`ipt>window.onload=()=>{window.print();window.onafterprint=()=>window.close()}</scr`+`ipt>
-    </body></html>`);
-    win.document.close();
-  },30);
 }
 
 // ════════════════════════════
