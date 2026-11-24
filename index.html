@@ -852,6 +852,19 @@ function getDescriptorText(descKey,sum){
   return (table&&table[g])||'';
 }
 
+// Sugerencia para avanzar: muestra el descriptor oficial del nivel inmediatamente
+// superior (misma rúbrica), para que el profesor vea qué se espera para subir un punto.
+function getNextLevelSuggestion(descKey,sum){
+  if(sum==null) return '';
+  const g=sumToGrade(sum);
+  if(g==null) return '';
+  if(g>=7) return '<span style="color:var(--ok);font-weight:600">✓ Ya alcanza el nivel más alto (Nota 7).</span>';
+  const table=DESCRIPTORS[descKey]||DESCRIPTORS.general;
+  const nextText=table&&table[g+1];
+  if(!nextText) return '';
+  return `<strong>Para avanzar a Nota ${g+1}:</strong> ${nextText}`;
+}
+
 function getSubjectsInData(){
   if(!DATA) return [];
   const areas=[...new Set(DATA.records.map(r=>r.area))];
@@ -965,6 +978,7 @@ function renderPFTable(){
       <th rowspan="2" style="text-align:center">Suma</th>
       <th rowspan="2" style="text-align:center">Nota Final</th>
       <th rowspan="2">Descripción cualitativa</th>
+      <th rowspan="2">Sugerencias para avanzar</th>
     </tr>
     <tr>
       ${criteria.map(c=>{
@@ -997,6 +1011,7 @@ function renderPFTable(){
       <td class="num" id="pf-sum-${cssSafe(st)}">${sum??'—'}</td>
       <td class="num" id="pf-grade-${cssSafe(st)}">${grade??'—'}</td>
       <td class="pf-desc-cell" id="pf-desc-${cssSafe(st)}">${sum==null?'<span style="opacity:.5">Pendiente</span>':getDescriptorText(cfg.desc,sum)}</td>
+      <td class="pf-desc-cell" id="pf-next-${cssSafe(st)}">${sum==null?'<span style="opacity:.5">—</span>':getNextLevelSuggestion(cfg.desc,sum)}</td>
     </tr>`;
   });
   html+=`</tbody></table></div>
@@ -1023,9 +1038,11 @@ function updatePFScore(key,criteria,st,val){
   const sumCell=document.getElementById('pf-sum-'+cssSafe(st));
   const gradeCell=document.getElementById('pf-grade-'+cssSafe(st));
   const descCell=document.getElementById('pf-desc-'+cssSafe(st));
+  const nextCell=document.getElementById('pf-next-'+cssSafe(st));
   if(sumCell) sumCell.textContent = sum??'—';
   if(gradeCell) gradeCell.textContent = grade??'—';
   if(descCell) descCell.innerHTML = sum==null?'<span style="opacity:.5">Pendiente</span>':getDescriptorText(pfCurrent.cfg.desc,sum);
+  if(nextCell) nextCell.innerHTML = sum==null?'<span style="opacity:.5">—</span>':getNextLevelSuggestion(pfCurrent.cfg.desc,sum);
 }
 
 function exportPFScores(){
