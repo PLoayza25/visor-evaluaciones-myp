@@ -921,6 +921,16 @@ function buildAreaCriteriaScoreMap(area){
   return byCrit;
 }
 
+// Paleta de colores por criterio (cicla si hay más criterios que colores)
+const PF_CRIT_COLORS=[
+  {header:'#1e4d8c',tint:'#eaf1fb',tintStrong:'#d8e6f7'}, // azul
+  {header:'#7d3c98',tint:'#f5eefa',tintStrong:'#ecdcf5'}, // morado
+  {header:'#146c43',tint:'#e9f7ef',tintStrong:'#d3f0e0'}, // verde
+  {header:'#b45309',tint:'#fdf3e7',tintStrong:'#fbe6cc'}, // ámbar
+  {header:'#b71c1c',tint:'#fdeaea',tintStrong:'#fad3d3'}, // rojo
+  {header:'#00695c',tint:'#e3f2f0',tintStrong:'#c7e6e1'}, // verde azulado
+];
+
 function renderPFTable(){
   const {key,area,cfg}=pfCurrent;
   const criteria=getFullCriteria(area);
@@ -931,10 +941,11 @@ function renderPFTable(){
   const evals2=getEvalsForSemester(2);
   const hasBoth=evals1.length>0&&evals2.length>0;
   const byCrit=buildAreaCriteriaScoreMap(area);
+  const critColor=c=>PF_CRIT_COLORS[criteria.indexOf(c)%PF_CRIT_COLORS.length];
 
-  function histCell(v){
-    if(v==null) return `<td class="num" style="color:var(--faint)">—</td>`;
-    return `<td class="num${v<4?' low':''}">${v}</td>`;
+  function histCell(v,tint){
+    if(v==null) return `<td class="num" style="color:var(--faint);background:${tint}">—</td>`;
+    return `<td class="num${v<4?' low':''}" style="${v<4?'':'background:'+tint}">${v}</td>`;
   }
 
   const body=document.getElementById('pf-body');
@@ -946,21 +957,23 @@ function renderPFTable(){
         <button class="btn no-print" onclick="lockSubject()">🔒 Cambiar asignatura</button>
       </div>
     </div>
-    <p class="pf-hint" style="margin-top:0;margin-bottom:10px">A la izquierda de cada criterio ves los resultados registrados durante el año (en gris, solo lectura). Al final de cada criterio ingresas el <strong>puntaje final (0–8)</strong> que, a tu juicio, mejor representa el desempeño global del estudiante — no tiene que coincidir con un promedio.</p>
+    <p class="pf-hint" style="margin-top:0;margin-bottom:10px">Cada criterio tiene su propio color. A la izquierda ves los resultados registrados durante el año (solo lectura). Al final de cada criterio ingresas el <strong>puntaje final (0–8)</strong> que, a tu juicio, mejor representa el desempeño global del estudiante — no tiene que coincidir con un promedio.</p>
     <div class="table-wrap"><table class="pf-table"><thead>
     <tr>
       <th rowspan="2" style="vertical-align:bottom">Estudiante</th>
-      ${criteria.map(c=>`<th colspan="${evals1.length+evals2.length+1}" style="text-align:center;background:#1a1a1a;color:#fff">${c}</th>`).join('')}
+      ${criteria.map(c=>{const col=critColor(c);return `<th colspan="${evals1.length+evals2.length+1}" style="text-align:center;background:${col.header};color:#fff">${c}</th>`;}).join('')}
       <th rowspan="2" style="text-align:center">Suma</th>
       <th rowspan="2" style="text-align:center">Nota Final</th>
       <th rowspan="2">Descripción cualitativa</th>
     </tr>
     <tr>
-      ${criteria.map(()=>`
-        ${evals1.map(ev=>`<th style="text-align:center;font-weight:400;color:var(--muted)">${hasBoth?'S1·':''}${ev}</th>`).join('')}
-        ${evals2.map(ev=>`<th style="text-align:center;font-weight:400;color:var(--muted)">${hasBoth?'S2·':''}${ev}</th>`).join('')}
-        <th style="text-align:center;background:var(--surface2)">Final</th>
-      `).join('')}
+      ${criteria.map(c=>{
+        const col=critColor(c);
+        return `
+        ${evals1.map(ev=>`<th style="text-align:center;font-weight:400;color:${col.header};background:${col.tint}">${hasBoth?'S1·':''}${ev}</th>`).join('')}
+        ${evals2.map(ev=>`<th style="text-align:center;font-weight:400;color:${col.header};background:${col.tint}">${hasBoth?'S2·':''}${ev}</th>`).join('')}
+        <th style="text-align:center;background:${col.tintStrong};color:${col.header};font-weight:700">Final</th>
+      `;}).join('')}
     </tr>
     </thead><tbody>`;
 
@@ -970,12 +983,14 @@ function renderPFTable(){
     html+=`<tr>
       <td class="bold">${st}</td>
       ${criteria.map(c=>{
+        const col=critColor(c);
         const sem1Map=(byCrit[c]&&byCrit[c][st]&&byCrit[c][st][1])||{};
         const sem2Map=(byCrit[c]&&byCrit[c][st]&&byCrit[c][st][2])||{};
         const v=FINAL_SCORES[key][c][st];
-        return `${evals1.map(ev=>histCell(sem1Map[ev]??null)).join('')}
-          ${evals2.map(ev=>histCell(sem2Map[ev]??null)).join('')}
-          <td style="text-align:center;background:var(--surface2)"><input type="number" class="pf-score-input" min="0" max="8" step="1"
+        return `${evals1.map(ev=>histCell(sem1Map[ev]??null,col.tint)).join('')}
+          ${evals2.map(ev=>histCell(sem2Map[ev]??null,col.tint)).join('')}
+          <td style="text-align:center;background:${col.tintStrong}"><input type="number" class="pf-score-input" min="0" max="8" step="1"
+            style="border-color:${col.header}"
             value="${v??''}" data-st="${st.replace(/"/g,'&quot;')}" data-crit="${c.replace(/"/g,'&quot;')}"
             oninput="updatePFScore('${key}',this.dataset.crit,this.dataset.st,this.value)"></td>`;
       }).join('')}
