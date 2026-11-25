@@ -836,6 +836,7 @@ let pfCurrent = null; // {key, area, cfg} de la asignatura actualmente desbloque
 const COORD_PASSWORD = 'coor2026'; // clave de coordinador (vista por alumno)
 let pfCoord = null;   // {student} cuando el coordinador está en la vista por alumno
 
+function fmtGrade(g){return g==null?'—':Number(g).toFixed(1).replace('.',',')}
 function cssSafe(s){return String(s).replace(/[^a-zA-Z0-9]/g,'_')}
 
 function computeSum(key,criteria,st){
@@ -1318,23 +1319,28 @@ function buildReportCard(st,forPrint){
     .map(area=>({area,cfg:matchSubjectConfig(area)}))
     .filter(x=>x.cfg);
   if(subjectsWithFinal.length){
-    html+=`<div style="background:${BLACK};color:#fff;font-size:${fp?'9px':'13px'};font-weight:700;`+
-          `padding:${hdrPad};margin-bottom:0">Puntaje Final y Descripción Cualitativa</div>`;
-    html+=`<table style="width:100%;border-collapse:collapse;font-size:${fsS};`+
-          `margin-bottom:${fp?'5px':'10px'};border:1px solid ${MGRAY}"><tbody>`;
+    const hs=`padding:${cellPad};border:1px solid ${MGRAY};background:${BLACK};color:#fff;font-weight:700;text-align:center;font-size:${fsS}`;
+    html+=`<table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:${fsS};margin-bottom:${fp?'5px':'10px'};border:1px solid ${MGRAY}">
+      <thead>
+        <tr><th colspan="4" style="${hs};font-size:${fp?'9px':'13px'}">RESULTADO FINAL POR ASIGNATURA</th></tr>
+        <tr>
+          <th style="${hs};width:15%">ASIGNATURA</th>
+          <th style="${hs};width:9%">NOTA FINAL</th>
+          <th style="${hs};width:9%">PUNTAJE</th>
+          <th style="${hs};width:67%">DESCRIPTOR DE DESEMPEÑO</th>
+        </tr>
+      </thead><tbody>`;
     subjectsWithFinal.forEach(({area,cfg})=>{
       const criteria=getFullCriteria(area);
       const sum=computeSum(cfg.key,criteria,st);
       const grade=sum!=null?sumToGrade(sum):null;
       const descText=grade!=null?((DESCRIPTORS[cfg.desc]||DESCRIPTORS.general)[grade]||''):'';
+      const td=`padding:${cellPad};border:1px solid ${MGRAY};background:#F0EDE8;color:${BLACK};vertical-align:middle`;
       html+=`<tr>
-        <td style="padding:${cellPad};border-bottom:1px solid ${MGRAY};font-weight:600;vertical-align:top;width:110px">${area}</td>
-        <td style="padding:${cellPad};border-bottom:1px solid ${MGRAY};vertical-align:top">
-          <div style="font-weight:700;margin-bottom:2px;color:${sum!=null?RED:'#aaa'}">
-            ${sum!=null?`Puntaje: ${sum}/32 &nbsp;→&nbsp; Nota Final: ${grade}`:'Pendiente de ingreso'}
-          </div>
-          ${descText?`<div style="color:${DGRAY};line-height:1.35">${descText}</div>`:''}
-        </td>
+        <td style="${td};font-weight:600">${cfg.label}</td>
+        <td style="${td};text-align:center;font-weight:700;color:${RED}">${fmtGrade(grade)}</td>
+        <td style="${td};text-align:center">${sum!=null?sum+'/32':'Pendiente'}</td>
+        <td style="${td};line-height:1.35;text-align:justify">${descText||'<span style="color:#999">Pendiente de ingreso</span>'}</td>
       </tr>`;
     });
     html+=`</tbody></table>`;
