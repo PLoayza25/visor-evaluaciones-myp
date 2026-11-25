@@ -833,6 +833,8 @@ function saveFinalScores(){
 }
 let FINAL_SCORES = loadFinalScores();
 let pfCurrent = null; // {key, area, cfg} de la asignatura actualmente desbloqueada en este panel
+const COORD_PASSWORD = 'coor2026'; // clave de coordinador (vista por alumno)
+let pfCoord = null;   // {student} cuando el coordinador está en la vista por alumno
 
 function cssSafe(s){return String(s).replace(/[^a-zA-Z0-9]/g,'_')}
 
@@ -879,6 +881,7 @@ function getSubjectsInData(){
 function renderPuntajeFinal(){
   if(!DATA) return;
   if(pfCurrent){ renderPFTable(); return; }
+  if(pfCoord){ renderPFStudent(); return; }
   const body=document.getElementById('pf-body');
   const subjects=getSubjectsInData();
   if(!subjects.length){
@@ -895,7 +898,97 @@ function renderPuntajeFinal(){
       <input type="password" id="pf-password" placeholder="Clave" onkeydown="if(event.key==='Enter')tryUnlockSubject()">
       <button class="btn btn-primary" style="width:100%" onclick="tryUnlockSubject()">Ingresar</button>
       <div id="pf-login-error" style="display:none;color:var(--danger);font-size:12px;margin-top:10px"></div>
+    </div>
+    <div class="pf-login-card">
+      <label>🔑 Acceso coordinador — ingreso por alumno (todas las asignaturas)</label>
+      <input type="password" id="pf-coord-password" placeholder="Clave de coordinador" onkeydown="if(event.key==='Enter')tryUnlockCoord()">
+      <button class="btn btn-primary" style="width:100%" onclick="tryUnlockCoord()">Ingresar como coordinador</button>
+      <div id="pf-coord-error" style="display:none;color:var(--danger);font-size:12px;margin-top:10px"></div>
     </div>`;
+}
+
+function tryUnlockCoord(){
+  const pass=document.getElementById('pf-coord-password').value;
+  if(pass!==COORD_PASSWORD){
+    const err=document.getElementById('pf-coord-error');
+    err.style.display='block'; err.textContent='Clave incorrecta.';
+    return;
+  }
+  pfCoord={student:DATA.students[0]};
+  renderPFStudent();
+}
+function lockCoord(){ pfCoord=null; renderPuntajeFinal(); }
+function pfStudentStep(d){
+  const i=DATA.students.indexOf(pfCoord.student)+d;
+  if(i<0||i>=DATA.students.length) return;
+  pfCoord.student=DATA.students[i];
+  renderPFStudent();
+}
+function pfStudentSet(v){ pfCoord.student=v; renderPFStudent(); }
+
+// Vista del coordinador: un alumno, todas las asignaturas
+function renderPFStudent(){
+  const st=pfCoord.student;
+  const idx=DATA.students.indexOf(st);
+  const subjects=getSubjectsInData();
+  const evals1=getEvalsForSemester(1), evals2=getEvalsForSemester(2);
+  const hasBoth=evals1.length>0&&evals2.length>0;
+  const esc=x=>String(x).replace(/"/g,'&quot;');
+  let html=`
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+      <div class="controls">
+        <button class="btn no-print" onclick="pfStudentStep(-1)" ${idx<=0?'disabled':''}>◀ Anterior</button>
+        <select onchange="pfStudentSet(this.value)" style="font-size:13px;padding:7px 8px;max-width:320px">
+          ${DATA.students.map(x=>`<option value="${esc(x)}" ${x===st?'selected':''}>${x}</option>`).join('')}
+        </select>
+        <button class="btn no-print" onclick="pfStudentStep(1)" ${idx>=DATA.students.length-1?'disabled':''}>Siguiente ▶</button>
+        <span style="font-size:12px;color:var(--muted)">${idx+1} / ${DATA.students.length}</span>
+      </div>
+      <button class="btn no-print" onclick="lockCoord()">🔒 Salir (modo coordinador)</button>
+    </div>
+    <p class="pf-hint" style="margin-top:0;margin-bottom:14px">Modo coordinador: ingresa el <strong>puntaje final (0–8)</strong> por criterio para <strong>${st}</strong> en cada asignatura. Los colores y el historial del año son los mismos de la vista por asignatura.</p>`;
+
+  subjects.forEach(({area,cfg})=>{
+    const key=cfg.key;
+    const criteria=getFullCriteria(area);
+    if(!FINAL_SCORES[key]) FINAL_SCORES[key]={};
+    criteria.forEach(c=>{ if(!FINAL_SCORES[key][c]) FINAL_SCORES[key][c]={}; });
+    const byCrit=buildAreaCriteriaScoreMap(area);
+    const sum=computeSum(key,criteria,st);
+    const grade=sum!=null?sumToGrade(sum):null;
+    const colorOf=c=>PF_CRIT_COLORS[criteria.indexOf(c)%PF_CRIT_COLORS.length];
+    const hist=(v,tint)=>v==null?`<td class="num" style="color:var(--faint);background:${tint}">—</td>`:`<td class="num${v<4?' low':''}" style="${v<4?'':'background:'+tint}">${v}</td>`;
+    const sid=cssSafe(key)+'-'+cssSafe(st);
+    html+=`
+    <div style="margin-bottom:22px">
+      <div style="font-size:14px;font-weight:700;margin-bottom:6px">${cfg.label} <span style="font-weight:400;color:var(--muted);font-size:12px">· ${area}</span></div>
+      <div class="table-wrap"><table class="pf-table"><thead>
+        <tr>${criteria.map(c=>{const col=colorOf(c);return `<th colspan="${evals1.length+evals2.length+1}" style="text-align:center;background:${col.header};color:#fff">${c}</th>`;}).join('')}
+          <th rowspan="2" style="text-align:center">Suma</th><th rowspan="2" style="text-align:center">Nota Final</th>
+          <th rowspan="2">Descripción cualitativa</th><th rowspan="2">Sugerencias para avanzar</th></tr>
+        <tr>${criteria.map(c=>{const col=colorOf(c);return `
+          ${evals1.map(ev=>`<th style="text-align:center;font-weight:400;color:${col.header};background:${col.tint}">${hasBoth?'S1·':''}${ev}</th>`).join('')}
+          ${evals2.map(ev=>`<th style="text-align:center;font-weight:400;color:${col.header};background:${col.tint}">${hasBoth?'S2·':''}${ev}</th>`).join('')}
+          <th style="text-align:center;background:${col.tintStrong};color:${col.header};font-weight:700">Final</th>`;}).join('')}</tr>
+      </thead><tbody><tr>
+        ${criteria.map(c=>{
+          const col=colorOf(c);
+          const m1=(byCrit[c]&&byCrit[c][st]&&byCrit[c][st][1])||{};
+          const m2=(byCrit[c]&&byCrit[c][st]&&byCrit[c][st][2])||{};
+          const v=FINAL_SCORES[key][c][st];
+          return `${evals1.map(ev=>hist(m1[ev]??null,col.tint)).join('')}${evals2.map(ev=>hist(m2[ev]??null,col.tint)).join('')}
+            <td style="text-align:center;background:${col.tintStrong}"><input type="number" class="pf-score-input" min="0" max="8" step="1" style="border-color:${col.header}"
+              value="${v??''}" data-st="${esc(st)}" data-crit="${esc(c)}" oninput="updatePFScore('${key}',this.dataset.crit,this.dataset.st,this.value)"></td>`;
+        }).join('')}
+        <td class="num" id="pf-sum-${sid}">${sum??'—'}</td>
+        <td class="num" id="pf-grade-${sid}">${grade??'—'}</td>
+        <td class="pf-desc-cell" id="pf-desc-${sid}">${sum==null?'<span style="opacity:.5">Pendiente</span>':getDescriptorText(cfg.desc,sum)}</td>
+        <td class="pf-desc-cell" id="pf-next-${sid}">${sum==null?'<span style="opacity:.5">—</span>':getNextLevelSuggestion(cfg.desc,sum)}</td>
+      </tr></tbody></table></div>
+    </div>`;
+  });
+  html+=`<p class="pf-hint">Se guarda automáticamente en este navegador. Los puntajes ingresados aquí quedan en el mismo registro que los de cada profesor.</p>`;
+  document.getElementById('pf-body').innerHTML=html;
 }
 
 function tryUnlockSubject(){
@@ -1031,18 +1124,23 @@ function updatePFScore(key,criteria,st,val){
     FINAL_SCORES[key][criteria][st]=n;
   }
   saveFinalScores();
-  if(!pfCurrent) return;
-  const criteriaList=getFullCriteria(pfCurrent.area);
+  const cfg=SUBJECT_CONFIG.find(c=>c.key===key);
+  const subj=getSubjectsInData().find(x=>x.cfg.key===key);
+  if(!cfg||!subj) return;
+  const criteriaList=getFullCriteria(subj.area);
   const sum=computeSum(key,criteriaList,st);
   const grade=sum!=null?sumToGrade(sum):null;
-  const sumCell=document.getElementById('pf-sum-'+cssSafe(st));
-  const gradeCell=document.getElementById('pf-grade-'+cssSafe(st));
-  const descCell=document.getElementById('pf-desc-'+cssSafe(st));
-  const nextCell=document.getElementById('pf-next-'+cssSafe(st));
-  if(sumCell) sumCell.textContent = sum??'—';
-  if(gradeCell) gradeCell.textContent = grade??'—';
-  if(descCell) descCell.innerHTML = sum==null?'<span style="opacity:.5">Pendiente</span>':getDescriptorText(pfCurrent.cfg.desc,sum);
-  if(nextCell) nextCell.innerHTML = sum==null?'<span style="opacity:.5">—</span>':getNextLevelSuggestion(pfCurrent.cfg.desc,sum);
+  // Vista por asignatura (ids: pf-x-<st>) y vista por alumno (ids: pf-x-<key>-<st>)
+  [cssSafe(st), cssSafe(key)+'-'+cssSafe(st)].forEach(id=>{
+    const sumCell=document.getElementById('pf-sum-'+id);
+    const gradeCell=document.getElementById('pf-grade-'+id);
+    const descCell=document.getElementById('pf-desc-'+id);
+    const nextCell=document.getElementById('pf-next-'+id);
+    if(sumCell) sumCell.textContent = sum??'—';
+    if(gradeCell) gradeCell.textContent = grade??'—';
+    if(descCell) descCell.innerHTML = sum==null?'<span style="opacity:.5">Pendiente</span>':getDescriptorText(cfg.desc,sum);
+    if(nextCell) nextCell.innerHTML = sum==null?'<span style="opacity:.5">—</span>':getNextLevelSuggestion(cfg.desc,sum);
+  });
 }
 
 function exportPFScores(){
@@ -1072,6 +1170,7 @@ function handleImportScores(file){
       saveFinalScores();
       alert('Puntajes de "'+(payload.label||payload.subjectKey)+'" importados correctamente.');
       if(pfCurrent && pfCurrent.key===payload.subjectKey) renderPFTable();
+      else if(pfCoord) renderPFStudent();
     }catch(err){
       alert('Error al importar el archivo: '+err.message);
     }
