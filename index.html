@@ -215,6 +215,7 @@ tr:hover td{background:#f5f3ef}
     <button class="nav-btn" onclick="showPanel('fichas')">🖨️ Fichas individuales</button>
     <div class="nav-section">Reportes</div>
     <button class="nav-btn" onclick="showPanel('frecuencia')">📊 Frecuencia de evaluaciones</button>
+    <button class="nav-btn" onclick="showPanel('cobertura')">✅ Cobertura de criterios</button>
     <div class="nav-section">Profesores</div>
     <button class="nav-btn" onclick="showPanel('puntajefinal')">✍️ Puntaje Final</button>
   </div>
@@ -301,6 +302,22 @@ tr:hover td{background:#f5f3ef}
     </div>
   </div>
   <div id="fichas-container"></div>
+</div>
+
+<!-- COBERTURA DE CRITERIOS -->
+<div id="panel-cobertura" class="panel">
+  <div class="page-header">
+    <div>
+      <div class="page-title">Cobertura de criterios</div>
+      <div class="page-sub">Verifica que cada criterio de cada asignatura se evalúe el mínimo de veces exigido en el año</div>
+    </div>
+    <div class="controls">
+      <label style="font-size:12px">Mínimo anual por criterio
+        <input type="number" id="cov-min" value="2" min="1" max="10" style="width:56px;font-size:13px;padding:5px;margin-left:6px" oninput="renderCobertura()"></label>
+      <button class="btn no-print" onclick="window.print()">🖨️ Imprimir</button>
+    </div>
+  </div>
+  <div id="cov-body"></div>
 </div>
 
 <!-- FRECUENCIA DE EVALUACIONES -->
@@ -651,6 +668,7 @@ function showPanel(name){
   if(name==='fichas') renderFichas();
   if(name==='puntajefinal') renderPuntajeFinal();
   if(name==='frecuencia') renderFrecuencia();
+  if(name==='cobertura') renderCobertura();
 }
 
 // ════════════════════════════
@@ -1313,6 +1331,62 @@ function renderFrecuencia(){
     </tbody></table></div>
   </div>`;
   body.innerHTML=html;
+}
+
+// ════════════════════════════
+//  REPORTE: COBERTURA DE CRITERIOS (mínimo de evaluaciones por criterio)
+// ════════════════════════════
+function renderCobertura(){
+  if(!DATA) return;
+  const RED='#9b1c1c', BLACK='#1a1a1a';
+  const minReq=Math.max(1,parseInt(document.getElementById('cov-min').value)||2);
+  const areas=[...new Set(DATA.records.map(r=>r.area))].sort((a,b)=>a.localeCompare(b,'es'));
+  const hasBoth=DATA.records.some(r=>r.semester===1)&&DATA.records.some(r=>r.semester===2);
+
+  const rows=areas.map(area=>{
+    const criteria=getFullCriteria(area).map(c=>{
+      const s1=new Set(),s2=new Set();
+      DATA.records.forEach(r=>{
+        if(r.area!==area||r.criteria!==c) return;
+        (r.semester===2?s2:s1).add(abbrevEval(r.eval));
+      });
+      const n=s1.size+s2.size;
+      return {name:c,s1:s1.size,s2:s2.size,n,ok:n>=minReq};
+    });
+    return {area,criteria,ok:criteria.every(c=>c.ok)};
+  });
+
+  const totalCrit=rows.reduce((a,r)=>a+r.criteria.length,0);
+  const okCrit=rows.reduce((a,r)=>a+r.criteria.filter(c=>c.ok).length,0);
+  const okAreas=rows.filter(r=>r.ok).length;
+  const fails=rows.flatMap(r=>r.criteria.filter(c=>!c.ok).map(c=>({area:r.area,...c})));
+
+  let html=`<div class="fq-card">
+    <div class="fq-stats">
+      <div class="fq-stat"><div>Asignaturas que cumplen</div><div style="color:${okAreas===rows.length?'#146c43':RED}">${okAreas} / ${rows.length}</div></div>
+      <div class="fq-stat"><div>Criterios que cumplen</div><div>${okCrit} / ${totalCrit}</div></div>
+      <div class="fq-stat"><div>Incumplimientos</div><div style="color:${fails.length?RED:'#146c43'}">${fails.length}</div></div>
+    </div>
+    <div class="fq-title">Detalle por asignatura y criterio</div>
+    <div class="fq-sub">Cada celda indica cuántas evaluaciones del año incluyen ese criterio${hasBoth?' (entre paréntesis: 1er sem. + 2do sem.)':''}. Mínimo exigido: <strong>${minReq}</strong>.</div>
+    <div class="table-wrap"><table class="fq-table"><thead><tr><th>Asignatura</th><th>Criterios (evaluaciones en el año)</th><th>Estado</th></tr></thead><tbody>
+    ${rows.map(r=>`<tr>
+      <td style="font-weight:600;white-space:nowrap">${r.area}</td>
+      <td style="text-align:left"><div style="display:flex;gap:8px;flex-wrap:wrap">${r.criteria.map(c=>`
+        <span title="${c.name}: ${c.n} evaluación(es)" style="border:1px solid ${c.ok?'#b7dfc8':RED};background:${c.ok?'#e9f7ef':'#fdeaea'};border-radius:6px;padding:4px 9px;font-size:12px;white-space:nowrap">
+          ${c.ok?'✓':'✗'} <strong>${c.name.length>26?c.name.slice(0,24)+'…':c.name}</strong>: <span style="font-family:'IBM Plex Mono',monospace;font-weight:700">${c.n}</span>${hasBoth?` <span style="color:var(--muted)">(${c.s1}+${c.s2})</span>`:''}
+        </span>`).join('')}</div></td>
+      <td style="font-weight:700;white-space:nowrap;color:${r.ok?'#146c43':RED}">${r.ok?'✓ Cumple':'✗ No cumple'}</td>
+    </tr>`).join('')}
+    </tbody></table></div>
+  </div>`;
+
+  html+=`<div class="fq-card"><div class="fq-title">Criterios que no cumplen el mínimo</div>`+
+    (fails.length?`<div class="fq-sub">Faltan evaluaciones para alcanzar ${minReq} en el año.</div>
+    <table class="fq-table"><thead><tr><th>Asignatura</th><th>Criterio</th><th>Evaluado</th><th>Faltan</th></tr></thead><tbody>
+    ${fails.map(f=>`<tr><td style="font-weight:600">${f.area}</td><td style="text-align:left">${f.name}</td><td>${f.n}</td><td style="color:${RED};font-weight:700">${minReq-f.n}</td></tr>`).join('')}
+    </tbody></table>`:`<div class="fq-sub" style="color:#146c43;font-weight:600;margin:6px 0 0">✓ Todos los criterios de todas las asignaturas se evalúan al menos ${minReq} veces en el año.</div>`)+`</div>`;
+  document.getElementById('cov-body').innerHTML=html;
 }
 
 function buildReportCard(st,forPrint){
