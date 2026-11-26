@@ -1484,14 +1484,14 @@ function buildReportCard(st,forPrint,layout){
   // ── School header ──
   html+=`<div style="text-align:center;padding:${fp?'6px 0 4px':'12px 0 8px'};border-bottom:3px solid ${RED};margin-bottom:${fp?'6px':'12px'}">
     <div style="font-size:${fp?'18px':'26px'};font-weight:700;letter-spacing:-.5px">Redland School</div>
-    <div style="font-size:${fp?'11px':'14px'};font-weight:600;color:${RED};margin-top:1px">Informe MYP — Resultados por Criterio</div>
+    <div style="font-size:${fp?'11px':'14px'};font-weight:600;color:${RED};margin-top:1px">${layout==='reverso'?'Informe de Resultados':'Informe MYP — Resultados por Criterio'}</div>
     <div style="font-size:${fp?'8px':'11px'};color:${DGRAY};margin-top:2px">${DATA.period||''}</div>
   </div>`;
 
   // ── Student name bar ──
   html+=`<div style="display:flex;justify-content:space-between;align-items:center;`+
         `border:1.5px solid ${BLACK};padding:${fp?'4px 8px':'7px 14px'};margin-bottom:${fp?'6px':'12px'}">
-    <span style="font-size:${fp?'10px':'14px'}"><strong>Nombre:</strong>&nbsp;&nbsp;${st}</span>
+    <span style="font-size:${layout==='reverso'?(fp?'11px':'15.4px'):(fp?'10px':'14px')}"><strong>Nombre:</strong>&nbsp;&nbsp;${st}</span>
     <span style="font-size:${fp?'9px':'12px'};color:${DGRAY};font-weight:600">${DATA.period||''}</span>
   </div>`;
 
@@ -1555,7 +1555,7 @@ function buildReportCard(st,forPrint,layout){
           <th style="${hs};width:1%;white-space:nowrap">ASIGNATURA</th>
           <th style="${hs};width:1%;white-space:nowrap">NOTA FINAL</th>
           <th style="${hs};width:1%;white-space:nowrap">PUNTAJE</th>
-          <th style="${hs}">DESCRIPTOR DE DESEMPEÑO</th>
+          <th style="${hs}">DESCRIPTOR DE DESEMPEÑO${layout==='reverso'?' (MYP)':''}</th>
         </tr>
       </thead><tbody>`;
     subjectsWithFinal.forEach(({area,cfg})=>{
@@ -1637,7 +1637,7 @@ function buildReportCard(st,forPrint,layout){
         <div style="font-size:${fp?'10px':'13px'};font-weight:600;color:${RED}">Detalle de resultados por criterio — MYP</div>
       </div>
       <div style="display:flex;justify-content:space-between;border:1.5px solid ${BLACK};padding:${fp?'3px 8px':'6px 12px'};margin-bottom:${fp?'6px':'12px'};font-size:${fp?'9px':'12px'}">
-        <span><strong>Nombre:</strong>&nbsp;&nbsp;${st}</span><span style="color:${DGRAY};font-weight:600">${DATA.period||''}</span>
+        <span style="font-size:${fp?'11px':'15.4px'}"><strong>Nombre:</strong>&nbsp;&nbsp;${st}</span><span style="color:${DGRAY};font-weight:600">${DATA.period||''}</span>
       </div>
       ${secMYP}
       <div style="font-size:${fsXS};color:${DGRAY};margin-top:4px">Los resultados corresponden a cada criterio evaluado (escala 0–8). Los resultados bajo 4 se destacan en rojo.</div>
