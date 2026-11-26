@@ -1442,7 +1442,15 @@ function buildReportCard(st,forPrint,layout){
   });
 
   // Curso y año (se leen del Excel: fila "Curso…" y año del periodo/archivo; si no hay año, el actual)
-  const courseTxt=String(DATA.title||'').replace(/^\s*curso\s*:?\s*/i,'').trim();
+  const courseTxt=(function(){
+    const clean=t=>String(t||'').replace(/informe\s+de\s+competencias/ig,'').replace(/\bcurso\b\s*:?/ig,'').replace(/[_\-]+/g,' ').replace(/\s+/g,' ').trim();
+    const re=/(?<![\w])(\d{1,2})\s*(?:°|º|o|vo|mo|to|ro|do|er)?\s*(?:b[aá]sico|medio|a[nñ]o)?\s*[-\s]?\s*([A-Fa-f])(?![A-Za-zÁ-ú])/i;
+    for(const src of [DATA.title,DATA.filename]){
+      const c=clean(src), m=c.match(re);
+      if(m) return m[1]+'°'+m[2].toUpperCase();
+    }
+    return clean(DATA.title);
+  })();
   const yearM=(String(DATA.period||'')+' '+String(DATA.title||'')+' '+String(DATA.filename||'')).match(/\b(20\d{2})\b/);
   const yearTxt=yearM?yearM[1]:String(new Date().getFullYear());
   const IBnameFs=forPrint?'11px':'15.4px';
