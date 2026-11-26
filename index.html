@@ -248,6 +248,10 @@ tr:hover td{background:#f5f3ef}
       <div class="page-sub">Todas las asignaturas del alumno seleccionado</div>
     </div>
     <div class="controls">
+      <select class="rep-layout" onchange="setReportLayout(this.value)" title="Formato del informe">
+        <option value="standard">Informe estándar</option>
+        <option value="reverso">Informe IB: resultado final al frente, detalle por criterio al reverso</option>
+      </select>
       <select id="sel-student" onchange="renderEstudiante()"></select>
       <button class="btn no-print" onclick="printEstudiante()">🖨️ Imprimir este</button>
       <button class="btn btn-primary no-print" onclick="printTodos()">🖨️ Imprimir todos</button>
@@ -295,6 +299,10 @@ tr:hover td{background:#f5f3ef}
       <div class="page-sub">Resumen por estudiante — listo para imprimir</div>
     </div>
     <div class="controls">
+      <select class="rep-layout" onchange="setReportLayout(this.value)" title="Formato del informe">
+        <option value="standard">Informe estándar</option>
+        <option value="reverso">Informe IB: resultado final al frente, detalle por criterio al reverso</option>
+      </select>
       <select id="sel-student-ficha" onchange="renderFichas()">
         <option value="todos">Todos los estudiantes</option>
       </select>
@@ -1389,7 +1397,15 @@ function renderCobertura(){
   document.getElementById('cov-body').innerHTML=html;
 }
 
-function buildReportCard(st,forPrint){
+let REPORT_LAYOUT='standard'; // 'standard' | 'reverso'
+function setReportLayout(v){
+  REPORT_LAYOUT=v;
+  document.querySelectorAll('.rep-layout').forEach(e=>e.value=v);
+  if(document.getElementById('panel-estudiante').classList.contains('active')) renderEstudiante();
+  if(document.getElementById('panel-fichas').classList.contains('active')) renderFichas();
+}
+function buildReportCard(st,forPrint,layout){
+  layout=layout||REPORT_LAYOUT;
   const RED='#9b1c1c', BLACK='#1a1a1a', LGRAY='#f0f0f0', MGRAY='#d0d0d0', DGRAY='#444';
   const dataAreas=[...new Set(DATA.records.map(r=>r.area))];
 
@@ -1480,6 +1496,7 @@ function buildReportCard(st,forPrint){
   </div>`;
 
   // ── MYP Subjects ──
+  const _hMain=html; html='';
   html+=`<div style="background:${BLACK};color:#fff;font-size:${fp?'9px':'13px'};font-weight:700;`+
         `padding:${hdrPad};margin-bottom:0">Asignaturas MYP</div>`;
 
@@ -1523,6 +1540,7 @@ function buildReportCard(st,forPrint){
     });
   });
   html+=`</tbody></table>`;
+  const secMYP=html; html='';
 
   // ── Puntaje Final y Descripción Cualitativa ──
   const subjectsWithFinal=sortedAreas
@@ -1555,6 +1573,8 @@ function buildReportCard(st,forPrint){
     });
     html+=`</tbody></table>`;
   }
+  const secFinal=html;
+  html=_hMain+(layout==='reverso'?secFinal:secMYP+secFinal);
 
   // ── Other subjects ──
   html+=`<div style="background:${BLACK};color:#fff;font-size:${fp?'9px':'13px'};font-weight:700;`+
@@ -1608,6 +1628,21 @@ function buildReportCard(st,forPrint){
     </div>
     <div style="text-align:center;font-size:${fsS};color:${DGRAY};margin-top:4px">${todayCap}</div>
   </div>`;
+
+  // ── Reverso: detalle por criterio (formato IB) ──
+  if(layout==='reverso'){
+    html+=`<div style="${fp?'page-break-before:always;break-before:page;':'margin-top:28px;border-top:2px dashed #bbb;padding-top:18px;'}">
+      <div style="text-align:center;padding:${fp?'4px 0 3px':'8px 0 6px'};border-bottom:3px solid ${RED};margin-bottom:${fp?'6px':'12px'}">
+        <div style="font-size:${fp?'14px':'20px'};font-weight:700">Redland School</div>
+        <div style="font-size:${fp?'10px':'13px'};font-weight:600;color:${RED}">Detalle de resultados por criterio — MYP</div>
+      </div>
+      <div style="display:flex;justify-content:space-between;border:1.5px solid ${BLACK};padding:${fp?'3px 8px':'6px 12px'};margin-bottom:${fp?'6px':'12px'};font-size:${fp?'9px':'12px'}">
+        <span><strong>Nombre:</strong>&nbsp;&nbsp;${st}</span><span style="color:${DGRAY};font-weight:600">${DATA.period||''}</span>
+      </div>
+      ${secMYP}
+      <div style="font-size:${fsXS};color:${DGRAY};margin-top:4px">Los resultados corresponden a cada criterio evaluado (escala 0–8). Los resultados bajo 4 se destacan en rojo.</div>
+    </div>`;
+  }
 
   html+=`</div>`;
   return html;
