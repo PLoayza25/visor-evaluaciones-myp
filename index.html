@@ -1441,6 +1441,15 @@ function buildReportCard(st,forPrint,layout){
     if(v!=null) byArea[r.area][r.criteria][r.semester][ev]=v;
   });
 
+  // Curso y año (se leen del Excel: fila "Curso…" y año del periodo/archivo; si no hay año, el actual)
+  const courseTxt=String(DATA.title||'').replace(/^\s*curso\s*:?\s*/i,'').trim();
+  const yearM=(String(DATA.period||'')+' '+String(DATA.title||'')+' '+String(DATA.filename||'')).match(/\b(20\d{2})\b/);
+  const yearTxt=yearM?yearM[1]:String(new Date().getFullYear());
+  const IBnameFs=forPrint?'11px':'15.4px';
+  const nameSpans=`<span style="font-size:${IBnameFs}"><strong>Nombre:</strong>&nbsp;&nbsp;${st}</span>
+    <span style="font-size:${IBnameFs}"><strong>Curso:</strong>&nbsp;&nbsp;${courseTxt||'—'}</span>
+    <span style="font-size:${IBnameFs}"><strong>Año:</strong>&nbsp;&nbsp;${yearTxt}</span>`;
+
   const OTRAS_FIXED=['Deportes','Religión (Católica)','Mundo de Religiones','Orientación'];
 
   const today=new Date().toLocaleDateString('es-CL',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
@@ -1491,7 +1500,7 @@ function buildReportCard(st,forPrint,layout){
   // ── Student name bar ──
   html+=`<div style="display:flex;justify-content:space-between;align-items:center;`+
         `border:1.5px solid ${BLACK};padding:${fp?'4px 8px':'7px 14px'};margin-bottom:${fp?'6px':'12px'}">
-    <span style="font-size:${layout==='reverso'?(fp?'11px':'15.4px'):(fp?'10px':'14px')}"><strong>Nombre:</strong>&nbsp;&nbsp;${st}</span>
+    ${layout==='reverso'?nameSpans:`<span style="font-size:${fp?'10px':'14px'}"><strong>Nombre:</strong>&nbsp;&nbsp;${st}</span>`}
     <span style="font-size:${fp?'9px':'12px'};color:${DGRAY};font-weight:600">${DATA.period||''}</span>
   </div>`;
 
@@ -1637,7 +1646,7 @@ function buildReportCard(st,forPrint,layout){
         <div style="font-size:${fp?'10px':'13px'};font-weight:600;color:${RED}">Detalle de resultados por criterio — MYP</div>
       </div>
       <div style="display:flex;justify-content:space-between;border:1.5px solid ${BLACK};padding:${fp?'3px 8px':'6px 12px'};margin-bottom:${fp?'6px':'12px'};font-size:${fp?'9px':'12px'}">
-        <span style="font-size:${fp?'11px':'15.4px'}"><strong>Nombre:</strong>&nbsp;&nbsp;${st}</span><span style="color:${DGRAY};font-weight:600">${DATA.period||''}</span>
+        ${nameSpans}<span style="color:${DGRAY};font-weight:600">${DATA.period||''}</span>
       </div>
       ${secMYP}
       <div style="font-size:${fsXS};color:${DGRAY};margin-top:4px">Los resultados corresponden a cada criterio evaluado (escala 0–8). Los resultados bajo 4 se destacan en rojo.</div>
